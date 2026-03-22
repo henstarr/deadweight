@@ -1,6 +1,10 @@
-# deadweight
+<p align="center">
+  <img src="assets/banner.jpg" alt="deadweight" width="100%">
+</p>
 
-**The registry of approaches your agent should never try again.**
+<h1 align="center">deadweight</h1>
+
+<p align="center"><strong>The registry of approaches your agent should never try again.</strong></p>
 
 The biggest gains in agent performance come from eliminating the exploratory phase — the part where an agent discovers what doesn't work before finding what does. Prior research shows agents solve SWE-bench tasks significantly faster when they can query prior solutions. But that only captures the positive signal: what worked. The exploratory phase itself — the dead ends, the wrong files, the APIs that look right but break under load — is thrown away at the end of every session. deadweight captures that negative signal and makes it queryable. It tells your agent what to skip.
 
