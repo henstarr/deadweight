@@ -26,8 +26,13 @@ from .db import (
 from .models import DeadEnd, DeadEndCreate, RepoInsight
 
 WRITE_TOKEN = os.environ.get("DEADWEIGHT_TOKEN", "")
+
+# Resolve frontend directory — works whether running from repo source or installed package
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _FRONTEND_DIR = _PROJECT_ROOT / "frontend"
+if not _FRONTEND_DIR.exists():
+    # Fallback: check relative to working directory (e.g. Render deploys)
+    _FRONTEND_DIR = Path.cwd() / "frontend"
 
 app = FastAPI(
     title="deadweight",
