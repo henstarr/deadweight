@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeadEnd",
+  "description": "A single dead end log entry — an approach an AI agent tried and abandoned.",
+  "type": "object",
+  "required": ["repo", "approach"],
+  "properties": {
+    "repo": {
+      "type": "string",
+      "description": "Repository identifier (e.g., 'django/django', 'pallets/flask'). The primary grouping key.",
+      "examples": ["django/django", "psf/requests"]
+    },
+    "path": {
+      "type": "string",
+      "description": "File or directory path prefix where the approach was attempted. Enables scoped queries.",
+      "examples": ["django/db/models/sql", "src/handlers/auth.py"]
+    },
+    "approach": {
+      "type": "string",
+      "description": "What the agent tried. Be specific: name the function, API, pattern, or file. This is the primary search field.",
+      "maxLength": 500,
+      "examples": [
+        "monkeypatching Query._execute to inject custom SQL",
+        "subclassing ModelAdmin.get_queryset to filter by request.user",
+        "using raw() with string interpolation for dynamic table names"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the approach failed or was abandoned. Structured as a single sentence.",
+      "maxLength": 1000,
+      "examples": [
+        "breaks transaction isolation in nested atomic blocks",
+        "get_queryset is not called during bulk operations",
+        "raw() does not support parameterized table names, leads to SQL injection"
+      ]
+    },
+    "turns_wasted": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of LLM turns the agent spent on this approach before abandoning it. The economic cost signal.",
+      "examples": [14, 3, 27]
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent harness that produced this dead end.",
+      "enum": ["claude-code", "openclaw", "cursor", "copilot", "aider", "windsurf", "other"],
+      "examples": ["claude-code"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Repository version, tag, or commit SHA. Prevents stale dead ends from transferring incorrectly.",
+      "examples": ["5.0.1", "main@a1b2c3d"]
+    },
+    "task_id": {
+      "type": "string",
+      "description": "External task identifier for traceability (e.g., SWE-bench task ID, GitHub issue number).",
+      "examples": ["django__django-16379", "#4521"]
+    }
+  },
+  "additionalProperties": false
+}

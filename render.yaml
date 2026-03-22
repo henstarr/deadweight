@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: deadweight
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: uvicorn deadweight.server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: deadweight-db
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: DEADWEIGHT_TOKEN
+        value: ""
+
+databases:
+  - name: deadweight-db
+    plan: free
+    databaseName: deadweight
