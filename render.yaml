@@ -11,7 +11,7 @@ services:
           name: deadweight-db
           property: connectionString
       - key: PYTHON_VERSION
-        value: "3.12"
+        value: "3.12.3"
       - key: DEADWEIGHT_TOKEN
         value: ""
 
