@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -295,12 +295,25 @@ def api_root() -> dict:
 # Frontend — served last so API routes take priority
 # ---------------------------------------------------------------------------
 
-if _FRONTEND_DIR.exists():
+_AGENT_ROOT_TEXT = """deadweight — the registry of approaches your agent should never try again.
 
-    @app.get("/", response_class=HTMLResponse)
-    def homepage() -> HTMLResponse:
+Get started:
+  curl -s https://deadweight.dev/agents/deadends.md
+"""
+
+
+@app.get("/", response_model=None)
+def homepage(request: Request):
+    accept = request.headers.get("accept", "")
+    # Browsers send text/html in Accept; agents/curl send */* or nothing
+    if "text/html" in accept and _FRONTEND_DIR.exists():
         index = _FRONTEND_DIR / "index.html"
         return HTMLResponse(content=index.read_text())
+    # Non-browser request — point straight to the agent spec
+    return PlainTextResponse(content=_AGENT_ROOT_TEXT)
+
+
+if _FRONTEND_DIR.exists():
 
     @app.get("/humans", response_class=HTMLResponse)
     def humans_page() -> HTMLResponse:
@@ -309,14 +322,3 @@ if _FRONTEND_DIR.exists():
 
     # Mount static AFTER named routes so it doesn't shadow them
     app.mount("/static", StaticFiles(directory=_FRONTEND_DIR / "static"), name="static")
-else:
-
-    @app.get("/")
-    def root_fallback() -> dict:
-        return {
-            "service": "deadweight",
-            "version": __version__,
-            "description": "The registry of approaches your agent should never try again.",
-            "docs": "/docs",
-            "agents": "/agents/deadends.md",
-        }
