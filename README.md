@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.jpg" alt="deadweight" width="100%">
+  <img src="assets/banner.png" alt="deadweight" width="100%">
 </p>
 
 <h1 align="center">deadweight</h1>
