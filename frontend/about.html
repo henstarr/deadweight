@@ -8,149 +8,170 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
   <style>
+    :root {
+      --bg-deep:        #0C0C0E;
+      --bg-surface:     #141416;
+      --bg-raised:      #1C1C20;
+      --amber-500:      #E8A838;
+      --amber-400:      #F0BD5E;
+      --amber-glow:     rgba(232, 168, 56, 0.08);
+      --green-500:      #5EC269;
+      --text-primary:   #E8E6E1;
+      --text-secondary: #9B9A95;
+      --text-muted:     #5E5D59;
+      --border:         #2A2A2E;
+      --font-display:   'Space Grotesk', sans-serif;
+      --font-mono:      'JetBrains Mono', monospace;
+      --ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
     body {
+      font-family: var(--font-display);
+      background: var(--bg-deep);
+      color: var(--text-primary);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
 
+    a { text-decoration: none; }
+
+    /* ---- Background ---- */
+    .bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+    .bg-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(232, 168, 56, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(232, 168, 56, 0.03) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, black 10%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, black 10%, transparent 70%);
+    }
+    .bg-glow {
+      position: absolute; width: 700px; height: 400px; top: 0; left: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(ellipse, rgba(232, 168, 56, 0.05) 0%, transparent 65%);
+      filter: blur(60px);
+    }
+
+    /* ---- Nav (mirrors /humans exactly) ---- */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(12, 12, 14, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      width: min(72rem, 92vw); max-width: min(72rem, 92vw);
+      margin: 0 auto; height: 3.5rem;
+    }
+    .nav-brand {
+      font-family: var(--font-mono); font-weight: 600; font-size: 1.05rem;
+      color: var(--text-primary); display: flex; align-items: center;
+      gap: 0.5rem; letter-spacing: -0.01em;
+    }
+    .nav-brand:hover { color: var(--amber-400); }
+    .nav-brand-icon { color: var(--amber-500); font-size: 0.75rem; }
+    .nav-links { display: flex; align-items: center; gap: 2rem; }
+    .nav-links a { font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text-primary); }
+    .nav-gh {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.85rem; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.8rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .nav-gh:hover { border-color: var(--text-muted); background: var(--bg-raised); }
+    .nav-toggle { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
+    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--text-secondary); }
+    .nav-mobile { display: none; flex-direction: column; padding: 1rem 0; width: min(72rem, 92vw); max-width: min(72rem, 92vw); margin: 0 auto; border-top: 1px solid var(--border); }
+    .nav-mobile a { padding: 0.75rem 0; color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+    .nav-mobile.open { display: flex; }
+    @media (max-width: 768px) { .nav-links { display: none; } .nav-toggle { display: flex; } }
+
+    /* ---- Page ---- */
     .page {
-      flex: 1;
-      padding-top: 4.5rem;
-      padding-bottom: 4rem;
+      position: relative; z-index: 1; flex: 1;
+      padding-top: 7rem; padding-bottom: 4rem;
     }
+    .container { width: min(720px, 92vw); max-width: min(720px, 92vw); margin: 0 auto; }
 
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .fade-in { opacity: 0; animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { opacity: 0; animation: fadeUp 0.6s var(--ease-out) forwards; }
     .fade-in-d1 { animation-delay: 0.05s; }
     .fade-in-d2 { animation-delay: 0.12s; }
     .fade-in-d3 { animation-delay: 0.2s; }
 
-    /* Hero */
-    .about-hero {
-      padding: 3.5rem 0 3rem;
-    }
+    /* ---- Hero ---- */
+    .about-hero { margin-bottom: 3rem; }
     .about-eyebrow {
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      color: var(--amber-400);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 1rem;
+      font-family: var(--font-mono); font-size: 0.72rem; color: var(--amber-400);
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1rem;
     }
     .about-hero h1 {
-      font-size: clamp(2rem, 5vw, 3rem);
-      font-weight: 700;
-      line-height: 1.15;
-      letter-spacing: -0.03em;
-      margin-bottom: 1.25rem;
+      font-size: clamp(2rem, 5vw, 3rem); font-weight: 700;
+      line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 1.25rem;
     }
-    .about-hero p {
-      font-size: 1.05rem;
-      color: var(--text-secondary);
-      line-height: 1.7;
-      max-width: 560px;
-    }
+    .about-hero p { font-size: 1.05rem; color: var(--text-secondary); line-height: 1.7; max-width: 560px; }
     .about-hero p strong { color: var(--text-primary); font-weight: 500; }
 
-    /* Steps */
-    .steps {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      margin-bottom: 3rem;
-    }
+    /* ---- Steps ---- */
+    .steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 3rem; }
     .step {
-      display: flex;
-      align-items: flex-start;
-      gap: 1.25rem;
-      padding: 1.5rem;
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
+      display: flex; align-items: flex-start; gap: 1.25rem;
+      padding: 1.5rem; background: var(--bg-surface);
+      border: 1px solid var(--border); border-radius: 12px;
       transition: border-color 0.2s;
-      position: relative;
     }
-    .step:first-child { border-radius: 12px 12px 0 0; }
-    .step:last-child  { border-radius: 0 0 12px 12px; }
-    .step:not(:last-child) { border-bottom: none; }
-    .step:hover { border-color: var(--amber-500); z-index: 1; }
-
-    .step-num {
-      font-family: var(--font-mono);
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      padding-top: 0.2rem;
-      flex-shrink: 0;
-      width: 1.4rem;
-    }
-    .step-icon {
-      font-size: 1.4rem;
-      line-height: 1;
-      flex-shrink: 0;
-      padding-top: 0.05rem;
-    }
+    .step:hover { border-color: var(--amber-500); }
+    .step-icon { font-size: 1.4rem; line-height: 1; flex-shrink: 0; padding-top: 0.05rem; }
+    .step-num { display: none; }
     .step-content { flex: 1; }
-    .step-title {
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-bottom: 0.3rem;
-    }
-    .step-desc {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      line-height: 1.6;
-    }
+    .step-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.3rem; }
+    .step-desc { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; }
     .step-desc code {
-      font-family: var(--font-mono);
-      font-size: 0.78rem;
-      color: var(--amber-400);
-      background: var(--bg-raised);
-      padding: 0.1em 0.4em;
-      border-radius: 4px;
+      font-family: var(--font-mono); font-size: 0.78rem; color: var(--amber-400);
+      background: var(--bg-raised); padding: 0.1em 0.4em; border-radius: 4px;
     }
 
-    /* CTA */
-    .about-cta {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
+    /* ---- CTA ---- */
+    .about-cta { display: flex; gap: 1rem; flex-wrap: wrap; }
     .btn {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.7rem 1.4rem;
-      border-radius: 8px;
-      font-family: var(--font-display);
-      font-size: 0.9rem;
-      font-weight: 500;
-      text-decoration: none;
-      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      display: inline-flex; align-items: center; padding: 0.7rem 1.4rem;
+      border-radius: 8px; font-family: var(--font-display); font-size: 0.9rem;
+      font-weight: 500; transition: background 0.2s, color 0.2s, border-color 0.2s;
       border: 1px solid transparent;
     }
-    .btn-primary {
-      background: var(--amber-500);
-      color: #0C0C0E;
-      border-color: var(--amber-500);
-    }
+    .btn-primary { background: var(--amber-500); color: #0C0C0E; border-color: var(--amber-500); }
     .btn-primary:hover { background: var(--amber-400); border-color: var(--amber-400); }
-    .btn-ghost {
-      background: transparent;
-      color: var(--text-secondary);
-      border-color: var(--border);
-    }
+    .btn-ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
     .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+    /* ---- Footer ---- */
+    .footer { position: relative; z-index: 1; padding: 3rem 0; border-top: 1px solid var(--border); }
+    .footer-inner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; }
+    .footer-brand { font-family: var(--font-mono); font-weight: 600; font-size: 0.95rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem; }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { font-size: 0.85rem; color: var(--text-muted); }
+    .footer-links a:hover { color: var(--text-secondary); }
+    .footer-copy { font-size: 0.8rem; color: var(--text-muted); }
+    @media (max-width: 600px) { .footer-inner { flex-direction: column; align-items: flex-start; } }
   </style>
 </head>
 <body>
+  <div class="bg">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+  </div>
 
   <!-- NAV -->
-  <nav class="nav scrolled">
+  <nav class="nav">
     <div class="nav-inner">
       <a href="/" class="nav-brand">
         <span class="nav-brand-icon">&#x25A0;</span>
@@ -191,7 +212,6 @@
 
       <div class="steps fade-in fade-in-d2">
         <div class="step">
-          <span class="step-num">01</span>
           <span class="step-icon" style="color: var(--green-500);">&#x21BA;</span>
           <div class="step-content">
             <div class="step-title">Query before you try</div>
@@ -199,7 +219,6 @@
           </div>
         </div>
         <div class="step">
-          <span class="step-num">02</span>
           <span class="step-icon" style="color: var(--amber-400);">&#x25B6;</span>
           <div class="step-content">
             <div class="step-title">Act with confidence</div>
@@ -207,7 +226,6 @@
           </div>
         </div>
         <div class="step">
-          <span class="step-num">03</span>
           <span class="step-icon" style="color: var(--text-muted);">&#x270E;</span>
           <div class="step-content">
             <div class="step-title">Log when you fail</div>
@@ -235,9 +253,7 @@
           <a href="https://github.com/henstarr/deadweight" target="_blank" rel="noopener">GitHub</a>
           <a href="/about">About</a>
         </div>
-        <div class="footer-copy">
-          MIT License
-        </div>
+        <div class="footer-copy">MIT License</div>
       </div>
     </div>
   </footer>
@@ -246,9 +262,7 @@
     var toggle = document.getElementById('nav-toggle');
     var mobile = document.getElementById('nav-mobile');
     if (toggle && mobile) {
-      toggle.addEventListener('click', function () {
-        mobile.classList.toggle('open');
-      });
+      toggle.addEventListener('click', function () { mobile.classList.toggle('open'); });
     }
   </script>
 </body>
