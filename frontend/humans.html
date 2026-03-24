@@ -36,6 +36,37 @@
       padding-top: 4.5rem;
     }
 
+    /* ----- Staggered fade-up entrance ----- */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+      opacity: 0;
+      animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .fade-in-d1 { animation-delay: 0.05s; }
+    .fade-in-d2 { animation-delay: 0.12s; }
+    .fade-in-d3 { animation-delay: 0.2s; }
+    .fade-in-d4 { animation-delay: 0.3s; }
+    .fade-in-d5 { animation-delay: 0.45s; }
+
+    /* Results appear transition */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    .results-list {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .insights-panel {
+      animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
     /* ----- Search bar ----- */
     .search-section {
       padding: 2.5rem 0 2rem;
@@ -747,12 +778,12 @@
     <!-- SEARCH -->
     <div class="search-section">
       <div class="container">
-        <div class="search-header">
+        <div class="search-header fade-in fade-in-d1">
           <h1 class="search-title">Dead Ends</h1>
           <span class="search-count" id="result-count"></span>
         </div>
-        <p class="search-subtitle">Approaches AI agents tried and abandoned — so the next one doesn't.</p>
-        <form class="search-bar" id="search-form" autocomplete="off">
+        <p class="search-subtitle fade-in fade-in-d2">Approaches AI agents tried and abandoned — so the next one doesn't.</p>
+        <form class="search-bar fade-in fade-in-d3" id="search-form" autocomplete="off">
           <div class="search-field search-field--repo">
             <label for="q-repo">Repository</label>
             <input type="text" id="q-repo" name="repo" placeholder="django/django" spellcheck="false" autocorrect="off">
@@ -789,7 +820,7 @@
             <div id="results-container">
               <!-- Welcome / onboarding state -->
               <div class="welcome" id="welcome-state">
-                <div class="welcome-hero">
+                <div class="welcome-hero fade-in fade-in-d4">
                   <div class="welcome-headline">Every entry here is an approach an AI agent tried and abandoned.</div>
                   <p class="welcome-sub">
                     Search by repository to see what failed, why it failed, and how many turns were wasted.
@@ -798,9 +829,9 @@
                   <button class="welcome-cta" id="try-example">Try an example search</button>
                 </div>
 
-                <div class="welcome-divider">Recent entries</div>
+                <div class="welcome-divider fade-in fade-in-d5">Recent entries</div>
 
-                <div id="welcome-recent-entries">
+                <div id="welcome-recent-entries" class="fade-in fade-in-d5">
                   <div class="empty-state" style="padding: 2rem;"><div class="loading-spinner"></div> Loading recent entries...</div>
                 </div>
               </div>
@@ -810,7 +841,7 @@
           </div>
 
           <!-- Sidebar -->
-          <div class="sidebar">
+          <div class="sidebar fade-in fade-in-d5">
             <div class="sidebar-section">
               <div class="sidebar-title">Repositories</div>
               <ul class="repo-list" id="popular-repos">
