@@ -130,6 +130,37 @@
     .search-btn:hover { background: var(--amber-400); }
     .search-btn:active { transform: scale(0.97); }
 
+    .search-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: -1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .search-more-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      cursor: pointer;
+      padding: 0.4rem 0;
+      transition: color 0.2s;
+    }
+    .search-more-toggle:hover { color: var(--amber-400); }
+
+    @media (max-width: 640px) {
+      .search-section { padding: 1.5rem 0 1.25rem; }
+      .search-header { margin-bottom: 0.75rem; }
+      .search-field--approach,
+      .search-field--path { display: none; }
+      .search-field--approach.show-mobile,
+      .search-field--path.show-mobile { display: block; }
+      .search-more-toggle { display: inline-block; }
+      .search-bar { gap: 0.5rem; }
+    }
+
     /* ----- Results list ----- */
     .results-section {
       padding: 2rem 0;
@@ -339,10 +370,28 @@
       .browse-layout {
         grid-template-columns: 1fr;
       }
-      /* Main content first (welcome/results), sidebar below */
       .main-col { order: 0; }
       .sidebar { order: 1; }
+      /* On mobile, hide sidebar "Latest dead ends" — it's in main column already */
+      #recent-sidebar-section { display: none; }
+      /* Limit visible repos on mobile */
+      .repo-list li:nth-child(n+5) { display: none; }
+      .repo-list.show-all li { display: list-item; }
+      .repo-show-all { display: block; }
     }
+
+    .repo-show-all {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      cursor: pointer;
+      padding: 0.5rem 0;
+      transition: color 0.2s;
+    }
+    .repo-show-all:hover { color: var(--amber-400); }
 
     /* ----- Empty + loading states ----- */
     .empty-state {
@@ -412,6 +461,13 @@
 
     .welcome-cta:hover { background: var(--amber-400); }
     .welcome-cta:active { transform: scale(0.97); }
+
+    @media (max-width: 640px) {
+      .welcome-hero { padding: 1.5rem 0.5rem 1rem; margin-bottom: 1rem; }
+      .welcome-headline { font-size: 1.1rem; }
+      .welcome-sub { font-size: 0.85rem; margin-bottom: 1rem; }
+      .dead-end-entry { padding: 1rem; }
+    }
 
     .welcome-divider {
       display: flex;
@@ -656,6 +712,7 @@
           <h1 class="search-title">Dead Ends</h1>
           <span class="search-count" id="result-count"></span>
         </div>
+        <p class="search-subtitle">Approaches AI agents tried and abandoned — so the next one doesn't.</p>
         <form class="search-bar" id="search-form" autocomplete="off">
           <div class="search-field search-field--repo">
             <label for="q-repo">Repository</label>
@@ -671,6 +728,7 @@
           </div>
           <button type="submit" class="search-btn">Search</button>
         </form>
+        <button class="search-more-toggle" id="search-more-toggle">+ More filters</button>
       </div>
     </div>
 
@@ -719,6 +777,7 @@
               <ul class="repo-list" id="popular-repos">
                 <li style="color: var(--text-muted); font-size: 0.82rem; padding: 0.5rem 0;">Loading...</li>
               </ul>
+              <button class="repo-show-all" id="repo-show-all">Show all repos</button>
             </div>
 
             <div class="sidebar-section" id="recent-sidebar-section">
@@ -1030,6 +1089,28 @@
         approachInput.value = '';
         pathInput.value = '';
         runSearch();
+      });
+    }
+
+    // ---- Mobile "More filters" toggle ----
+    var moreToggle = document.getElementById('search-more-toggle');
+    if (moreToggle) {
+      moreToggle.addEventListener('click', function () {
+        var approachField = document.querySelector('.search-field--approach');
+        var pathField = document.querySelector('.search-field--path');
+        var showing = approachField.classList.toggle('show-mobile');
+        pathField.classList.toggle('show-mobile');
+        moreToggle.textContent = showing ? '- Hide filters' : '+ More filters';
+      });
+    }
+
+    // ---- "Show all repos" toggle ----
+    var showAllBtn = document.getElementById('repo-show-all');
+    if (showAllBtn) {
+      showAllBtn.addEventListener('click', function () {
+        var list = document.getElementById('popular-repos');
+        list.classList.toggle('show-all');
+        showAllBtn.textContent = list.classList.contains('show-all') ? 'Show less' : 'Show all repos';
       });
     }
 
