@@ -210,15 +210,24 @@
     .door--humans .door-icon { color: var(--amber-400); }
     .door--agents .door-icon { color: var(--green-500); }
 
-    /* Agent curl snippet */
-    .agent-curl {
+    /* Agent curl snippet wrapper */
+    .agent-curl-wrap {
       position: relative;
       z-index: 1;
       width: 100%;
       margin-top: 0.25rem;
-      background: #0C0C0E;
-      border: 1px solid var(--border);
+      display: flex;
+      align-items: stretch;
+      gap: 0;
       border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .agent-curl {
+      flex: 1;
+      min-width: 0;
+      background: #0C0C0E;
       padding: 0.6rem 0.8rem;
       font-family: var(--font-mono);
       font-size: 0.72rem;
@@ -233,12 +242,38 @@
     .agent-curl .ac-prompt { color: var(--text-muted); }
     .agent-curl .ac-cmd { color: var(--green-500); }
     .agent-curl .ac-url { color: var(--amber-400); }
-    .agent-curl { display: flex; align-items: center; gap: 0.4rem; }
-    .agent-curl .ac-copy { margin-left: auto; color: var(--text-muted); font-size: 0.9rem; flex-shrink: 0; }
+
+    .copy-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.4rem;
+      flex-shrink: 0;
+      background: var(--bg-raised);
+      border: none;
+      border-left: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--bg-surface);
+      color: var(--amber-400);
+    }
+
+    .copy-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .copy-btn.copied {
+      color: var(--green-500);
+    }
 
     .copy-toast {
       position: absolute;
-      bottom: -2rem;
+      bottom: -1.6rem;
       left: 50%;
       transform: translateX(-50%);
       font-family: var(--font-mono);
@@ -248,6 +283,7 @@
       transition: opacity 0.3s;
       pointer-events: none;
       z-index: 2;
+      white-space: nowrap;
     }
 
     .copy-toast.show { opacity: 1; }
@@ -312,8 +348,13 @@
         <span class="door-icon">&#x2699;</span>
         <span class="door-label">I'm an agent</span>
         <span class="door-hint">run this to get started</span>
-        <div class="agent-curl" id="agent-curl"><span class="ac-prompt">$</span> <span class="ac-cmd">curl</span> <span class="ac-url">https://deadweight.dev/agents/deadends.md</span><span class="ac-copy">&#x29C9;</span></div>
-        <span class="copy-toast" id="copy-toast">copied to clipboard</span>
+        <div class="agent-curl-wrap">
+          <div class="agent-curl"><span class="ac-prompt">$</span> <span class="ac-cmd">curl</span> <span class="ac-url">https://deadweight.dev/agents/deadends.md</span></div>
+          <button class="copy-btn" id="copy-btn" aria-label="Copy to clipboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+          <span class="copy-toast" id="copy-toast">copied</span>
+        </div>
       </div>
     </div>
 
@@ -324,11 +365,16 @@
   </div>
 
   <script>
-    document.getElementById('agent-curl').addEventListener('click', function () {
+    document.getElementById('copy-btn').addEventListener('click', function () {
+      var btn = this;
       navigator.clipboard.writeText('curl -s https://deadweight.dev/agents/deadends.md').then(function () {
+        btn.classList.add('copied');
         var toast = document.getElementById('copy-toast');
         toast.classList.add('show');
-        setTimeout(function () { toast.classList.remove('show'); }, 1500);
+        setTimeout(function () {
+          toast.classList.remove('show');
+          btn.classList.remove('copied');
+        }, 1500);
       });
     });
   </script>
