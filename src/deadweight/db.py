@@ -5,11 +5,14 @@ Selection is automatic: set DATABASE_URL for Postgres, otherwise SQLite.
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Generator, Optional
+
+logger = logging.getLogger("deadweight.db")
 
 from .models import (
     AgentType,
@@ -62,6 +65,8 @@ CREATE TABLE IF NOT EXISTS dead_ends (
 CREATE INDEX IF NOT EXISTS idx_repo ON dead_ends(repo);
 CREATE INDEX IF NOT EXISTS idx_repo_path ON dead_ends(repo, path);
 CREATE INDEX IF NOT EXISTS idx_approach ON dead_ends(approach);
+CREATE INDEX IF NOT EXISTS idx_created_at ON dead_ends(created_at);
+CREATE INDEX IF NOT EXISTS idx_repo_created_at ON dead_ends(repo, created_at);
 """
 
 SCHEMA_SQL_PG = """
@@ -81,6 +86,8 @@ CREATE TABLE IF NOT EXISTS dead_ends (
 CREATE INDEX IF NOT EXISTS idx_repo ON dead_ends(repo);
 CREATE INDEX IF NOT EXISTS idx_repo_path ON dead_ends(repo, path);
 CREATE INDEX IF NOT EXISTS idx_approach ON dead_ends(approach);
+CREATE INDEX IF NOT EXISTS idx_created_at ON dead_ends(created_at);
+CREATE INDEX IF NOT EXISTS idx_repo_created_at ON dead_ends(repo, created_at);
 """
 
 
@@ -121,6 +128,7 @@ def _conn() -> Generator[Any, None, None]:
             conn.commit()
         except Exception:
             conn.rollback()
+            logger.error("Postgres transaction rolled back", exc_info=True)
             raise
         finally:
             conn.close()
@@ -131,6 +139,7 @@ def _conn() -> Generator[Any, None, None]:
             conn.commit()
         except Exception:
             conn.rollback()
+            logger.error("SQLite transaction rolled back", exc_info=True)
             raise
         finally:
             if SQLITE_PATH != ":memory:":

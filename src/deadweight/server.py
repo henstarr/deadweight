@@ -6,6 +6,7 @@ Or:       deadweight serve
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional, Union
@@ -13,8 +14,11 @@ from typing import Optional, Union
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from . import __version__
 from .db import (
@@ -27,7 +31,14 @@ from .db import (
 )
 from .models import DeadEnd, DeadEndCreate, RepoInsight
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("deadweight")
+
 WRITE_TOKEN = os.environ.get("DEADWEIGHT_TOKEN", "")
+limiter = Limiter(key_func=get_remote_address)
 
 # Resolve frontend directory — works whether running from repo source or installed package
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -44,12 +55,22 @@ app = FastAPI(
     redoc_url=None,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Public API — CORS is intentionally open so any agent/domain can query the commons.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +79,9 @@ app.add_middleware(
 
 
 @app.get("/query")
+@limiter.limit("60/minute")
 def search_dead_ends(
+    request: Request,
     repo: str = Query(..., description="Repository identifier"),
     path: Optional[str] = Query(None, description="File/dir path prefix"),
     approach: Optional[str] = Query(None, description="Approach keywords"),
@@ -69,6 +92,8 @@ def search_dead_ends(
 
     No authentication required. This is the public commons.
     """
+    logger.info("QUERY repo=%s path=%s approach=%s agent=%s limit=%s ip=%s",
+                repo, path, approach, agent, limit, request.client.host if request.client else "unknown")
     results = query_dead_ends(
         repo=repo, path=path, approach=approach, agent=agent, limit=limit
     )
@@ -85,15 +110,22 @@ def search_dead_ends(
 
 
 @app.post("/log", status_code=201)
+@limiter.limit("20/minute")
 def log_dead_end(
+    request: Request,
     entry: DeadEndCreate,
     authorization: Optional[str] = Header(None),
 ) -> dict:
     """Log a dead end. Simple token auth for writes (optional in dev mode)."""
     if WRITE_TOKEN and authorization != f"Bearer {WRITE_TOKEN}":
+        logger.warning("Unauthorized /log attempt ip=%s",
+                       request.client.host if request.client else "unknown")
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 
     dead_end = insert_dead_end(entry)
+    logger.info("LOGGED id=%s repo=%s approach=%.80s ip=%s",
+                dead_end.id, entry.repo, entry.approach,
+                request.client.host if request.client else "unknown")
 
     # Find similar patterns from other repos — the cross-pollination feature
     similar = find_similar_patterns(
@@ -305,6 +337,11 @@ def custom_docs() -> HTMLResponse:
 
 @app.get("/health")
 def health() -> dict:
+    try:
+        list_repos(limit=1)
+    except Exception:
+        logger.error("Health check: database unreachable", exc_info=True)
+        raise HTTPException(status_code=503, detail="Database unavailable")
     return {"status": "ok"}
 
 
