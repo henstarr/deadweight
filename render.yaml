@@ -15,6 +15,14 @@ services:
       - key: DEADWEIGHT_TOKEN
         value: ""
 
+  - type: cron
+    name: deadweight-keepalive
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:latest
+    schedule: "*/10 * * * *"
+    command: curl -s https://deadweight.dev/health
+
 databases:
   - name: deadweight-db
     plan: free
