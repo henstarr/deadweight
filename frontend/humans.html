@@ -153,12 +153,29 @@
     @media (max-width: 640px) {
       .search-section { padding: 1.5rem 0 1.25rem; }
       .search-header { margin-bottom: 0.75rem; }
+      .search-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .search-field--repo {
+        flex: unset;
+        width: 100%;
+        min-width: unset;
+      }
       .search-field--approach,
-      .search-field--path { display: none; }
+      .search-field--path {
+        display: none;
+        flex: unset;
+        width: 100%;
+        min-width: unset;
+      }
       .search-field--approach.show-mobile,
       .search-field--path.show-mobile { display: block; }
+      .search-btn {
+        width: 100%;
+        align-self: stretch;
+      }
       .search-more-toggle { display: inline-block; }
-      .search-bar { gap: 0.5rem; }
     }
 
     /* ----- Results list ----- */
@@ -470,10 +487,17 @@
     .welcome-cta:active { transform: scale(0.97); }
 
     @media (max-width: 640px) {
-      .welcome-hero { padding: 1.5rem 0.5rem 1rem; margin-bottom: 1rem; }
+      .welcome-hero { padding: 1.5rem 0 1rem; margin-bottom: 1rem; }
       .welcome-headline { font-size: 1.1rem; }
       .welcome-sub { font-size: 0.85rem; margin-bottom: 1rem; }
       .dead-end-entry { padding: 1rem; }
+      .de-header { flex-direction: column; gap: 0.35rem; }
+      .de-approach { font-size: 0.95rem; }
+      .de-reason { font-size: 0.85rem; }
+      .de-footer { font-size: 0.7rem; }
+      .insights-panel { padding: 1rem; }
+      .insights-stats { gap: 0.75rem; }
+      .insight-stat-num { font-size: 1.4rem; }
     }
 
     .welcome-divider {
