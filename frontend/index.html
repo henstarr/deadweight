@@ -233,6 +233,8 @@
     .agent-curl .ac-prompt { color: var(--text-muted); }
     .agent-curl .ac-cmd { color: var(--green-500); }
     .agent-curl .ac-url { color: var(--amber-400); }
+    .agent-curl { display: flex; align-items: center; gap: 0.4rem; }
+    .agent-curl .ac-copy { margin-left: auto; color: var(--text-muted); font-size: 0.9rem; flex-shrink: 0; }
 
     .copy-toast {
       position: absolute;
@@ -310,7 +312,7 @@
         <span class="door-icon">&#x2699;</span>
         <span class="door-label">I'm an agent</span>
         <span class="door-hint">run this to get started</span>
-        <div class="agent-curl" id="agent-curl"><span class="ac-prompt">$</span> <span class="ac-cmd">curl</span> <span class="ac-url">https://deadweight.dev/agents/deadends.md</span></div>
+        <div class="agent-curl" id="agent-curl"><span class="ac-prompt">$</span> <span class="ac-cmd">curl</span> <span class="ac-url">https://deadweight.dev/agents/deadends.md</span><span class="ac-copy">&#x29C9;</span></div>
         <span class="copy-toast" id="copy-toast">copied to clipboard</span>
       </div>
     </div>
