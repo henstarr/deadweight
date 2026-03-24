@@ -1,0 +1,76 @@
+<svg width="1200" height="280" viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="core-glow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"   stop-color="#E8A838" stop-opacity="0.09"/>
+      <stop offset="100%" stop-color="#0C0C0E" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="left-fade" cx="0%" cy="50%" r="60%">
+      <stop offset="0%"   stop-color="#0C0C0E" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0C0C0E" stop-opacity="1"/>
+    </radialGradient>
+    <radialGradient id="right-fade" cx="100%" cy="50%" r="60%">
+      <stop offset="0%"   stop-color="#0C0C0E" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0C0C0E" stop-opacity="1"/>
+    </radialGradient>
+    <filter id="text-glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Base -->
+  <rect width="1200" height="280" fill="#0C0C0E"/>
+
+  <!-- Horizontal grid lines — very subtle -->
+  <line x1="0" y1="56"  x2="1200" y2="56"  stroke="#1C1C20" stroke-width="1"/>
+  <line x1="0" y1="112" x2="1200" y2="112" stroke="#1C1C20" stroke-width="1"/>
+  <line x1="0" y1="168" x2="1200" y2="168" stroke="#1C1C20" stroke-width="1"/>
+  <line x1="0" y1="224" x2="1200" y2="224" stroke="#1C1C20" stroke-width="1"/>
+
+  <!-- Ambient amber glow behind wordmark -->
+  <ellipse cx="600" cy="140" rx="520" ry="160" fill="url(#core-glow)"/>
+
+  <!-- Fade edges so grid lines don't reach corners -->
+  <rect width="220" height="280" fill="url(#left-fade)" transform="scale(-1,1) translate(-220,0)"/>
+  <rect x="980" width="220" height="280" fill="url(#right-fade)"/>
+
+  <!-- Top amber accent line -->
+  <rect x="0" y="0" width="1200" height="2" fill="#E8A838"/>
+
+  <!-- Decorative left bracket -->
+  <text x="148" y="158"
+        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,monospace"
+        font-size="96" font-weight="300" fill="#E8A838" opacity="0.18"
+        text-anchor="middle">[</text>
+
+  <!-- Decorative right bracket -->
+  <text x="1052" y="158"
+        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,monospace"
+        font-size="96" font-weight="300" fill="#E8A838" opacity="0.18"
+        text-anchor="middle">]</text>
+
+  <!-- Wordmark — "dead" chalk, "weight" amber, with glow on amber half -->
+  <text x="600" y="152" text-anchor="middle" dominant-baseline="central"
+        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace"
+        font-size="82" font-weight="600" letter-spacing="-2">
+    <tspan fill="#E8A838" filter="url(#text-glow)" opacity="0.35">weight</tspan>
+  </text>
+  <text x="600" y="152" text-anchor="middle" dominant-baseline="central"
+        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace"
+        font-size="82" font-weight="600" letter-spacing="-2">
+    <tspan fill="#E8E6E1">dead</tspan><tspan fill="#E8A838">weight</tspan>
+  </text>
+
+  <!-- Short amber divider -->
+  <rect x="548" y="200" width="104" height="1.5" fill="#E8A838" opacity="0.55" rx="1"/>
+
+  <!-- Tagline -->
+  <text x="600" y="227" text-anchor="middle"
+        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,monospace"
+        font-size="12.5" fill="#9B9A95" letter-spacing="3.5">
+    THE REGISTRY OF APPROACHES YOUR AGENT SHOULD NEVER TRY AGAIN
+  </text>
+
+  <!-- Bottom border -->
+  <rect x="0" y="278" width="1200" height="2" fill="#2A2A2E"/>
+</svg>
