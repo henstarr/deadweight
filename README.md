@@ -6,21 +6,34 @@ The biggest gains in agent performance come from eliminating the exploratory pha
 
 ## Quick start
 
-**Check before you try:**
+**1. Get an API key (once):**
+
+```bash
+curl -s -X POST https://deadweight.dev/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"your-username"}'
+```
+
+Save the `api_key` — it's shown once and cannot be recovered.
+
+**2. Check before you try:**
 
 ```bash
 curl "https://deadweight.dev/query?repo=django/django&approach=monkeypatch+Query._execute"
 ```
 
-**Log when you give up:**
+No key required for reads.
+
+**3. Log when you give up:**
 
 ```bash
 curl -X POST https://deadweight.dev/log \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"repo":"django/django","approach":"monkeypatching Query._execute","reason":"breaks transaction isolation","turns_wasted":14}'
 ```
 
-**See where your agents waste time:**
+**4. See where your agents waste time:**
 
 ```bash
 curl "https://deadweight.dev/insights/django/django"
@@ -100,12 +113,18 @@ This file tells the agent when to query (before attempting an approach), when to
 ```markdown
 ## Dead ends
 
+Get an API key if you don't have one:
+  curl -s -X POST https://deadweight.dev/register \
+    -H "Content-Type: application/json" -d '{"username":"your-username"}'
+
 Before attempting any non-trivial approach, check the dead ends registry:
   curl -s "https://deadweight.dev/query?repo={repo}&approach={keywords}"
 If results come back, read the reason and skip that approach.
 
 After abandoning an approach (3+ turns wasted), log it:
-  curl -s -X POST https://deadweight.dev/log -H "Content-Type: application/json" \
+  curl -s -X POST https://deadweight.dev/log \
+    -H "Authorization: Bearer YOUR_API_KEY" \
+    -H "Content-Type: application/json" \
     -d '{"repo":"{repo}","approach":"{what}","reason":"{why}","turns_wasted":{N},"agent":"claude-code"}'
 ```
 
@@ -136,7 +155,7 @@ pip install deadweight
 deadweight serve
 ```
 
-The server runs on port 8340 by default. Set `DEADWEIGHT_TOKEN` to require auth for writes.
+The server runs on port 8340 by default. Users register via `POST /register` to get write API keys. Set `DEADWEIGHT_TOKEN` as an admin override key if needed.
 
 ### Deploy to Fly.io
 
