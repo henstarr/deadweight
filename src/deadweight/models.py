@@ -98,3 +98,13 @@ class SimilarPattern(BaseModel):
     approach: str
     reason: Optional[str]
     turns_wasted: Optional[int]
+
+
+class UserRegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
+class UserRegisterResponse(BaseModel):
+    username: str
+    api_key: str
+    message: str

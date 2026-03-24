@@ -12,6 +12,11 @@ from deadweight.server import app
 
 client = TestClient(app)
 
+# Register once for the whole test session — avoids hitting the /register rate limit.
+_r = client.post("/register", json={"username": "test-session-user"})
+assert _r.status_code == 201, _r.text
+AUTH = {"Authorization": f"Bearer {_r.json()['api_key']}"}
+
 
 def test_root():
     r = client.get("/")
@@ -35,10 +40,29 @@ def test_health():
     assert r.json()["status"] == "ok"
 
 
+def test_register():
+    r = client.post("/register", json={"username": "unique-reg-user"})
+    assert r.status_code == 201
+    data = r.json()
+    assert "api_key" in data
+    assert data["username"] == "unique-reg-user"
+    assert "Save this key" in data["message"]
+
+    # Duplicate username should 409
+    r2 = client.post("/register", json={"username": "unique-reg-user"})
+    assert r2.status_code == 409
+
+
+def test_log_requires_auth():
+    r = client.post("/log", json={"repo": "x/y", "approach": "something"})
+    assert r.status_code == 401
+
+
 def test_log_and_query():
     # Log a dead end
     r = client.post(
         "/log",
+        headers=AUTH,
         json={
             "repo": "test/repo",
             "approach": "monkeypatching the thing",
@@ -63,10 +87,12 @@ def test_log_and_query():
 def test_query_with_approach_filter():
     client.post(
         "/log",
+        headers=AUTH,
         json={"repo": "filter/repo", "approach": "using raw SQL injection"},
     )
     client.post(
         "/log",
+        headers=AUTH,
         json={"repo": "filter/repo", "approach": "subclassing the manager"},
     )
 
@@ -93,6 +119,7 @@ def test_insights():
     for i in range(3):
         client.post(
             "/log",
+            headers=AUTH,
             json={
                 "repo": "insights/repo",
                 "approach": "bad approach",
@@ -118,6 +145,7 @@ def test_log_minimal():
     """Only repo and approach are required."""
     r = client.post(
         "/log",
+        headers=AUTH,
         json={"repo": "minimal/repo", "approach": "just the approach"},
     )
     assert r.status_code == 201
@@ -126,6 +154,7 @@ def test_log_minimal():
 def test_log_rejects_invalid_agent():
     r = client.post(
         "/log",
+        headers=AUTH,
         json={
             "repo": "test/repo",
             "approach": "something",

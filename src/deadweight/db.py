@@ -5,8 +5,10 @@ Selection is automatic: set DATABASE_URL for Postgres, otherwise SQLite.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -49,6 +51,13 @@ def _pg_sql(sql: str) -> str:
 # ---------------------------------------------------------------------------
 
 SCHEMA_SQL_SQLITE = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    api_key_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dead_ends (
     id TEXT PRIMARY KEY,
     repo TEXT NOT NULL,
@@ -70,6 +79,13 @@ CREATE INDEX IF NOT EXISTS idx_repo_created_at ON dead_ends(repo, created_at);
 """
 
 SCHEMA_SQL_PG = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    api_key_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dead_ends (
     id TEXT PRIMARY KEY,
     repo TEXT NOT NULL,
@@ -402,6 +418,38 @@ def get_repo_insights(repo: str) -> Optional[RepoInsight]:
             most_common_paths=paths,
             agent_breakdown=agents,
         )
+
+
+def create_user(username: str) -> tuple[str, str]:
+    """Create a new user. Returns (username, plaintext_api_key). Key is shown once."""
+    api_key = secrets.token_hex(32)
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    user_id = secrets.token_hex(8)
+    created_at = datetime.now(timezone.utc)
+    created_at_val = created_at.isoformat() if not _USE_POSTGRES else created_at
+
+    with _conn() as conn:
+        try:
+            _execute(
+                conn,
+                "INSERT INTO users (id, username, api_key_hash, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, username, api_key_hash, created_at_val),
+            )
+        except Exception as e:
+            if "UNIQUE" in str(e) or "unique" in str(e) or "duplicate" in str(e).lower():
+                raise ValueError(f"Username '{username}' is already taken")
+            raise
+
+    logger.info("REGISTERED username=%s", username)
+    return username, api_key
+
+
+def verify_api_key(api_key: str) -> Optional[str]:
+    """Return the username if the key is valid, else None."""
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    with _conn() as conn:
+        row = _fetchone(conn, "SELECT username FROM users WHERE api_key_hash = ?", (api_key_hash,))
+    return row["username"] if row else None
 
 
 def _row_to_dead_end(row: dict) -> DeadEnd:

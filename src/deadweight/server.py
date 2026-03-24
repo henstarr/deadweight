@@ -22,14 +22,16 @@ from slowapi.util import get_remote_address
 
 from . import __version__
 from .db import (
+    create_user,
     find_similar_patterns,
     get_repo_insights,
     insert_dead_end,
     list_repos,
     query_dead_ends,
     recent_dead_ends,
+    verify_api_key,
 )
-from .models import DeadEnd, DeadEndCreate, RepoInsight
+from .models import DeadEnd, DeadEndCreate, RepoInsight, UserRegisterRequest, UserRegisterResponse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,6 +73,43 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+# ---------------------------------------------------------------------------
+# POST /register — get an API key
+# ---------------------------------------------------------------------------
+
+
+@app.post("/register", status_code=201)
+@limiter.limit("5/minute")
+def register(request: Request, body: UserRegisterRequest) -> UserRegisterResponse:
+    """Register a username and receive a write API key.
+
+    The key is returned exactly once and cannot be recovered. Save it immediately.
+    """
+    try:
+        username, api_key = create_user(body.username)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    return UserRegisterResponse(
+        username=username,
+        api_key=api_key,
+        message="Save this key — it will not be shown again.",
+    )
+
+
+def _authenticate(authorization: Optional[str]) -> Optional[str]:
+    """Return the authenticated username, or None if the token is invalid.
+
+    Accepts both per-user API keys (DB lookup) and the admin DEADWEIGHT_TOKEN env var.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ")
+    if WRITE_TOKEN and token == WRITE_TOKEN:
+        return "admin"
+    return verify_api_key(token)
 
 
 # ---------------------------------------------------------------------------
@@ -116,15 +155,16 @@ def log_dead_end(
     entry: DeadEndCreate,
     authorization: Optional[str] = Header(None),
 ) -> dict:
-    """Log a dead end. Simple token auth for writes (optional in dev mode)."""
-    if WRITE_TOKEN and authorization != f"Bearer {WRITE_TOKEN}":
+    """Log a dead end. Requires a valid API key from /register."""
+    username = _authenticate(authorization)
+    if username is None:
         logger.warning("Unauthorized /log attempt ip=%s",
                        request.client.host if request.client else "unknown")
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
+        raise HTTPException(status_code=401, detail="Invalid or missing API key. Register at POST /register.")
 
     dead_end = insert_dead_end(entry)
-    logger.info("LOGGED id=%s repo=%s approach=%.80s ip=%s",
-                dead_end.id, entry.repo, entry.approach,
+    logger.info("LOGGED id=%s repo=%s approach=%.80s user=%s ip=%s",
+                dead_end.id, entry.repo, entry.approach, username,
                 request.client.host if request.client else "unknown")
 
     # Find similar patterns from other repos — the cross-pollination feature
