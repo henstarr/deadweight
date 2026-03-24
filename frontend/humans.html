@@ -339,7 +339,9 @@
       .browse-layout {
         grid-template-columns: 1fr;
       }
-      .sidebar { order: -1; }
+      /* Main content first (welcome/results), sidebar below */
+      .main-col { order: 0; }
+      .sidebar { order: 1; }
     }
 
     /* ----- Empty + loading states ----- */
