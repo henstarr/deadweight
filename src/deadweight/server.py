@@ -21,7 +21,9 @@ from .db import (
     find_similar_patterns,
     get_repo_insights,
     insert_dead_end,
+    list_repos,
     query_dead_ends,
+    recent_dead_ends,
 )
 from .models import DeadEnd, DeadEndCreate, RepoInsight
 
@@ -102,6 +104,33 @@ def log_dead_end(
         "id": dead_end.id,
         "status": "logged",
         "similar_patterns": [s.model_dump(exclude_none=True) for s in similar],
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /repos — list repos with counts
+# ---------------------------------------------------------------------------
+
+
+@app.get("/repos")
+def repos_list(limit: int = Query(20, ge=1, le=100)) -> dict:
+    """List repositories that have dead ends, with counts."""
+    repos = list_repos(limit=limit)
+    return {"repos": repos}
+
+
+# ---------------------------------------------------------------------------
+# GET /recent — recent dead ends across all repos
+# ---------------------------------------------------------------------------
+
+
+@app.get("/recent")
+def recent_entries(limit: int = Query(10, ge=1, le=50)) -> dict:
+    """Get the most recent dead ends across all repos."""
+    entries = recent_dead_ends(limit=limit)
+    return {
+        "count": len(entries),
+        "dead_ends": [e.model_dump(exclude_none=True) for e in entries],
     }
 
 

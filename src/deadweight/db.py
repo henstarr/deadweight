@@ -180,6 +180,28 @@ def _fetchall(conn: Any, sql: str, params: tuple | list = ()) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+def list_repos(limit: int = 20) -> list[dict]:
+    """List repos with dead end counts, ordered by count descending."""
+    with _conn() as conn:
+        rows = _fetchall(
+            conn,
+            "SELECT repo, COUNT(*) as count FROM dead_ends GROUP BY repo ORDER BY count DESC LIMIT ?",
+            (limit,),
+        )
+    return [{"repo": r["repo"], "count": r["count"]} for r in rows]
+
+
+def recent_dead_ends(limit: int = 10) -> list[DeadEnd]:
+    """Get the most recent dead ends across all repos."""
+    with _conn() as conn:
+        rows = _fetchall(
+            conn,
+            "SELECT * FROM dead_ends ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+    return [_row_to_dead_end(r) for r in rows]
+
+
 def insert_dead_end(entry: DeadEndCreate) -> DeadEnd:
     dead_end = DeadEnd(**entry.model_dump())
     created_at_val = dead_end.created_at.isoformat() if not _USE_POSTGRES else dead_end.created_at
