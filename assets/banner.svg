@@ -12,10 +12,6 @@
       <stop offset="0%"   stop-color="#0C0C0E" stop-opacity="0"/>
       <stop offset="100%" stop-color="#0C0C0E" stop-opacity="1"/>
     </radialGradient>
-    <filter id="text-glow">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
 
   <!-- Base -->
@@ -37,24 +33,7 @@
   <!-- Top amber accent line -->
   <rect x="0" y="0" width="1200" height="2" fill="#E8A838"/>
 
-  <!-- Decorative left bracket -->
-  <text x="148" y="158"
-        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,monospace"
-        font-size="96" font-weight="300" fill="#E8A838" opacity="0.18"
-        text-anchor="middle">[</text>
-
-  <!-- Decorative right bracket -->
-  <text x="1052" y="158"
-        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,monospace"
-        font-size="96" font-weight="300" fill="#E8A838" opacity="0.18"
-        text-anchor="middle">]</text>
-
-  <!-- Wordmark — "dead" chalk, "weight" amber, with glow on amber half -->
-  <text x="600" y="152" text-anchor="middle" dominant-baseline="central"
-        font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace"
-        font-size="82" font-weight="600" letter-spacing="-2">
-    <tspan fill="#E8A838" filter="url(#text-glow)" opacity="0.35">weight</tspan>
-  </text>
+  <!-- Wordmark — "dead" chalk, "weight" amber -->
   <text x="600" y="152" text-anchor="middle" dominant-baseline="central"
         font-family="ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace"
         font-size="82" font-weight="600" letter-spacing="-2">
