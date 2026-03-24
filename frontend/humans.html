@@ -181,6 +181,7 @@
     /* ----- Results list ----- */
     .results-section {
       padding: 2rem 0;
+      overflow-x: hidden;
     }
 
     .results-list {
@@ -346,7 +347,8 @@
       padding: 0.6rem 0;
       border-top: 1px solid var(--border);
       font-size: 0.85rem;
-      gap: 1rem;
+      gap: 0.5rem;
+      max-width: 100%;
     }
 
     .insights-top-list li:first-child { border-top: none; }
@@ -388,17 +390,23 @@
       grid-template-columns: 1fr 22rem;
       gap: 2rem;
       align-items: start;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .main-col {
+      min-width: 0;
+      max-width: 100%;
     }
 
     @media (max-width: 900px) {
       .browse-layout {
         grid-template-columns: 1fr;
+        gap: 1.5rem;
       }
       .main-col { order: 0; }
-      .sidebar { order: 1; }
-      /* On mobile, hide sidebar "Latest dead ends" — it's in main column already */
+      .sidebar { order: 1; min-width: 0; }
       #recent-sidebar-section { display: none; }
-      /* Limit visible repos on mobile */
       .repo-list li:nth-child(n+5) { display: none; }
       .repo-list.show-all li { display: list-item; }
       .repo-show-all { display: block; }
