@@ -386,5 +386,10 @@ if _FRONTEND_DIR.exists():
         page = _FRONTEND_DIR / "humans.html"
         return HTMLResponse(content=page.read_text())
 
+    @app.get("/about", response_class=HTMLResponse)
+    def about_page() -> HTMLResponse:
+        page = _FRONTEND_DIR / "about.html"
+        return HTMLResponse(content=page.read_text())
+
     # Mount static AFTER named routes so it doesn't shadow them
     app.mount("/static", StaticFiles(directory=_FRONTEND_DIR / "static"), name="static")

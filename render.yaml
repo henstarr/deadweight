@@ -17,11 +17,10 @@ services:
 
   - type: cron
     name: deadweight-keepalive
-    runtime: image
-    image:
-      url: docker.io/curlimages/curl:latest
+    runtime: python
     schedule: "*/10 * * * *"
-    command: curl -s https://deadweight.dev/health
+    buildCommand: echo ok
+    startCommand: python -c "import urllib.request; urllib.request.urlopen('https://deadweight.dev/health')"
 
 databases:
   - name: deadweight-db
