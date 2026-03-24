@@ -391,6 +391,11 @@ def custom_docs() -> HTMLResponse:
     return HTMLResponse(content=content)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(_FRONTEND_DIR / "static" / "favicon.svg", media_type="image/svg+xml")
+
+
 @app.get("/health")
 def health() -> dict:
     try:
