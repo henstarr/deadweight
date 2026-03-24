@@ -13,7 +13,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.12.3"
       - key: DEADWEIGHT_TOKEN
-        value: ""
+        sync: false
 
   - type: cron
     name: deadweight-keepalive
