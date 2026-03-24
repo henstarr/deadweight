@@ -187,9 +187,14 @@
 
     .door-icon {
       position: relative;
-      font-size: 2.5rem;
-      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
       z-index: 1;
+    }
+
+    .door-icon svg {
+      width: 100%;
+      height: 100%;
     }
 
     .door-label {
@@ -341,7 +346,7 @@
 
     <div class="doors">
       <a href="/humans" class="door door--humans">
-        <span class="door-icon">&#x2616;</span>
+        <span class="door-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><polygon points="16,3 26,13 26,29 6,29 6,13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="miter"/></svg></span>
         <span class="door-label">I'm a human</span>
         <span class="door-hint">browse dead ends</span>
       </a>
