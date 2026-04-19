@@ -42,20 +42,20 @@ bd sync               # Sync with git
 <!-- deadweight:init -->
 ## Dead Ends Registry (deadweight)
 
-Before attempting any non-trivial coding approach, check for known dead ends:
+This repo tracks abandoned approaches in `.deadweight/deadends.jsonl` (committed).
+
+**Before** attempting any non-trivial coding approach, check for known dead ends:
 
 ```bash
-curl -s "https://deadweight.dev/query?repo=henstarr/deadweight&approach={keywords}"
+dw query --approach "{keywords}"
 ```
 
-If results come back, read the `reason` field — skip that approach.
+If a result matches your situation, skip that approach.
 
-When you abandon an approach after 3+ turns, log the dead end:
+**When** you abandon an approach after 3+ turns, log it:
 
 ```bash
-curl -s -X POST https://deadweight.dev/log \
-  -H "Content-Type: application/json" \
-  -d '{"repo":"henstarr/deadweight","approach":"{what you tried}","reason":"{why it failed}","turns_wasted":{N}}'
+dw log --approach "{what you tried}" --reason "{why it failed}" --turns-wasted {N}
 ```
 
-Fields: `repo` (required), `approach` (required), `path`, `reason`, `turns_wasted`, `agent`, `version`, `task_id`.
+Optional flags: `--path`, `--task-id`, `--agent`, `--version`.

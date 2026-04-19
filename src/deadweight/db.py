@@ -1,63 +1,41 @@
-"""Database layer — SQLite for local dev, Postgres for production.
+"""Repo-local storage layer for .deadweight/.
 
-Selection is automatic: set DATABASE_URL for Postgres, otherwise SQLite.
+Layout (mirrors beads):
+    .deadweight/
+      deadends.jsonl   — source of truth, committed to git
+      deadends.db      — SQLite index, rebuildable, gitignored
+      config.yaml      — repo id, sync branch
+
+The JSONL is authoritative. The SQLite DB is a cache built from it. If the JSONL
+is newer than the DB, we rebuild on next access. All writes append to the JSONL
+first, then insert into the index.
 """
 
 from __future__ import annotations
 
-import hashlib
+import json
 import logging
-import os
-import secrets
 import sqlite3
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Generator, Optional
-
-logger = logging.getLogger("deadweight.db")
+from datetime import datetime
+from pathlib import Path
 
 from .models import (
-    AgentType,
     DeadEnd,
     DeadEndCreate,
     DeadEndSummary,
     PathSummary,
     RepoInsight,
-    SimilarPattern,
 )
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-SQLITE_PATH = os.environ.get("DEADWEIGHT_DB", "deadweight.db")
+logger = logging.getLogger("deadweight.db")
 
-# Shared connection for in-memory databases (testing)
-_shared_conn: Optional[sqlite3.Connection] = None
+STORE_DIRNAME = ".deadweight"
+JSONL_FILE = "deadends.jsonl"
+DB_FILE = "deadends.db"
+CONFIG_FILE = "config.yaml"
+GITIGNORE_FILE = ".gitignore"
 
-_USE_POSTGRES = bool(DATABASE_URL)
-
-# ---------------------------------------------------------------------------
-# Unified query helpers — paramstyle adapters
-# ---------------------------------------------------------------------------
-# SQLite uses ? placeholders, Postgres uses %s.
-# We write queries with ? and convert at execution time for Postgres.
-
-
-def _pg_sql(sql: str) -> str:
-    """Convert ? placeholders to %s for psycopg2."""
-    return sql.replace("?", "%s")
-
-
-# ---------------------------------------------------------------------------
-# Connection layer
-# ---------------------------------------------------------------------------
-
-SCHEMA_SQL_SQLITE = """
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE,
-    api_key_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
+SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS dead_ends (
     id TEXT PRIMARY KEY,
     repo TEXT NOT NULL,
@@ -70,217 +48,247 @@ CREATE TABLE IF NOT EXISTS dead_ends (
     task_id TEXT,
     created_at TEXT NOT NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_repo ON dead_ends(repo);
 CREATE INDEX IF NOT EXISTS idx_repo_path ON dead_ends(repo, path);
 CREATE INDEX IF NOT EXISTS idx_approach ON dead_ends(approach);
 CREATE INDEX IF NOT EXISTS idx_created_at ON dead_ends(created_at);
-CREATE INDEX IF NOT EXISTS idx_repo_created_at ON dead_ends(repo, created_at);
-"""
-
-SCHEMA_SQL_PG = """
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE,
-    api_key_hash TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS dead_ends (
-    id TEXT PRIMARY KEY,
-    repo TEXT NOT NULL,
-    path TEXT,
-    approach TEXT NOT NULL,
-    reason TEXT,
-    turns_wasted INTEGER,
-    agent TEXT,
-    version TEXT,
-    task_id TEXT,
-    created_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_repo ON dead_ends(repo);
-CREATE INDEX IF NOT EXISTS idx_repo_path ON dead_ends(repo, path);
-CREATE INDEX IF NOT EXISTS idx_approach ON dead_ends(approach);
-CREATE INDEX IF NOT EXISTS idx_created_at ON dead_ends(created_at);
-CREATE INDEX IF NOT EXISTS idx_repo_created_at ON dead_ends(repo, created_at);
 """
 
 
-def _init_pg() -> None:
-    """Create tables in Postgres if they don't exist."""
-    import psycopg2
-
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        cur = conn.cursor()
-        cur.execute(SCHEMA_SQL_PG)
-        conn.commit()
-        cur.close()
-    finally:
-        conn.close()
+# ---------------------------------------------------------------------------
+# Store discovery
+# ---------------------------------------------------------------------------
 
 
-_pg_initialized = False
+def find_store(start: Path | None = None) -> Path | None:
+    """Walk up from `start` (or cwd) looking for a `.deadweight/` directory."""
+    p = (start or Path.cwd()).resolve()
+    for cand in [p, *p.parents]:
+        candidate = cand / STORE_DIRNAME
+        if candidate.is_dir():
+            return candidate
+    return None
 
 
-@contextmanager
-def _conn() -> Generator[Any, None, None]:
-    """Yield a DB connection. SQLite or Postgres based on DATABASE_URL."""
-    global _pg_initialized
-
-    if _USE_POSTGRES:
-        import psycopg2
-        import psycopg2.extras
-
-        if not _pg_initialized:
-            _init_pg()
-            _pg_initialized = True
-
-        conn = psycopg2.connect(DATABASE_URL)
-        try:
-            conn.cursor_factory = psycopg2.extras.RealDictCursor
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            logger.error("Postgres transaction rolled back", exc_info=True)
-            raise
-        finally:
-            conn.close()
-    else:
-        conn = _get_sqlite()
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            logger.error("SQLite transaction rolled back", exc_info=True)
-            raise
-        finally:
-            if SQLITE_PATH != ":memory:":
-                conn.close()
+def require_store(start: Path | None = None) -> Path:
+    store = find_store(start)
+    if store is None:
+        raise RuntimeError(
+            "No .deadweight/ directory found. Run `deadweight init` in your repo first."
+        )
+    return store
 
 
-def _get_sqlite() -> sqlite3.Connection:
-    global _shared_conn
-    if SQLITE_PATH == ":memory:":
-        if _shared_conn is None:
-            _shared_conn = sqlite3.connect(":memory:", check_same_thread=False)
-            _shared_conn.row_factory = sqlite3.Row
-            _shared_conn.executescript(SCHEMA_SQL_SQLITE)
-        return _shared_conn
-    conn = sqlite3.connect(SQLITE_PATH)
+def init_store(root: Path, repo: str) -> Path:
+    """Create `.deadweight/` under `root`, idempotent."""
+    store = root / STORE_DIRNAME
+    store.mkdir(exist_ok=True)
+
+    jsonl = store / JSONL_FILE
+    if not jsonl.exists():
+        jsonl.write_text("")
+
+    cfg = store / CONFIG_FILE
+    if not cfg.exists():
+        cfg.write_text(
+            "# deadweight config — committed to git so all clones agree\n"
+            f"repo: {repo}\n"
+            "schema_version: 1\n"
+            "sync_branch: deadweight-sync\n"
+        )
+
+    gi = store / GITIGNORE_FILE
+    if not gi.exists():
+        gi.write_text(
+            "# Local SQLite index — rebuildable from deadends.jsonl\n"
+            "*.db\n"
+            "*.db-*\n"
+        )
+
+    return store
+
+
+def read_config(store: Path) -> dict:
+    """Minimal `key: value` parser. Ignores comments, blank lines."""
+    cfg: dict = {}
+    path = store / CONFIG_FILE
+    if not path.exists():
+        return cfg
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, _, value = stripped.partition(":")
+        if key:
+            cfg[key.strip()] = value.strip()
+    return cfg
+
+
+# ---------------------------------------------------------------------------
+# Connection / index rebuild
+# ---------------------------------------------------------------------------
+
+
+def _db_path(store: Path) -> Path:
+    return store / DB_FILE
+
+
+def _jsonl_path(store: Path) -> Path:
+    return store / JSONL_FILE
+
+
+def _needs_rebuild(store: Path) -> bool:
+    db = _db_path(store)
+    jsonl = _jsonl_path(store)
+    if not db.exists():
+        return jsonl.exists()
+    if not jsonl.exists():
+        return False
+    return jsonl.stat().st_mtime > db.stat().st_mtime
+
+
+def _open(store: Path) -> sqlite3.Connection:
+    """Open a connection, rebuilding the index if the jsonl is newer."""
+    db = _db_path(store)
+    rebuild = _needs_rebuild(store)
+    conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.executescript(SCHEMA_SQL_SQLITE)
+    conn.executescript(SCHEMA_SQL)
+    if rebuild:
+        _rebuild_from_jsonl(conn, _jsonl_path(store))
     return conn
 
 
-def _execute(conn: Any, sql: str, params: tuple | list = ()) -> Any:
-    """Execute a query, adapting placeholders for the active backend."""
-    if _USE_POSTGRES:
-        cur = conn.cursor()
-        cur.execute(_pg_sql(sql), params)
-        return cur
-    else:
-        return conn.execute(sql, params)
+def _rebuild_from_jsonl(conn: sqlite3.Connection, jsonl: Path) -> int:
+    conn.execute("DELETE FROM dead_ends")
+    count = 0
+    if jsonl.exists():
+        for line in jsonl.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning("Skipping malformed jsonl line: %.80s", line)
+                continue
+            _insert_row(conn, data)
+            count += 1
+    conn.commit()
+    return count
 
 
-def _fetchone(conn: Any, sql: str, params: tuple | list = ()) -> Optional[dict]:
-    cur = _execute(conn, sql, params)
-    row = cur.fetchone()
-    if row is None:
-        return None
-    return dict(row)
-
-
-def _fetchall(conn: Any, sql: str, params: tuple | list = ()) -> list[dict]:
-    cur = _execute(conn, sql, params)
-    return [dict(r) for r in cur.fetchall()]
+def rebuild_index(store: Path) -> int:
+    """Force full rebuild of the sqlite index from the jsonl."""
+    db = _db_path(store)
+    for side in (db, db.parent / (db.name + "-wal"), db.parent / (db.name + "-shm")):
+        if side.exists():
+            side.unlink()
+    conn = _open(store)
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM dead_ends").fetchone()[0]
+    finally:
+        conn.close()
+    return n
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# CRUD
 # ---------------------------------------------------------------------------
 
 
-def list_repos(limit: int = 20) -> list[dict]:
-    """List repos with dead end counts, ordered by count descending."""
-    with _conn() as conn:
-        rows = _fetchall(
-            conn,
-            "SELECT repo, COUNT(*) as count FROM dead_ends GROUP BY repo ORDER BY count DESC LIMIT ?",
-            (limit,),
-        )
-    return [{"repo": r["repo"], "count": r["count"]} for r in rows]
+def _insert_row(conn: sqlite3.Connection, data: dict) -> None:
+    conn.execute(
+        """INSERT OR REPLACE INTO dead_ends
+           (id, repo, path, approach, reason, turns_wasted, agent, version, task_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            data.get("id"),
+            data.get("repo"),
+            data.get("path"),
+            data.get("approach"),
+            data.get("reason"),
+            data.get("turns_wasted"),
+            data.get("agent"),
+            data.get("version"),
+            data.get("task_id"),
+            data.get("created_at"),
+        ),
+    )
 
 
-def recent_dead_ends(limit: int = 10) -> list[DeadEnd]:
-    """Get the most recent dead ends across all repos."""
-    with _conn() as conn:
-        rows = _fetchall(
-            conn,
-            "SELECT * FROM dead_ends ORDER BY created_at DESC LIMIT ?",
-            (limit,),
-        )
-    return [_row_to_dead_end(r) for r in rows]
-
-
-def insert_dead_end(entry: DeadEndCreate) -> DeadEnd:
+def append_dead_end(store: Path, entry: DeadEndCreate) -> DeadEnd:
+    """Append an entry to the jsonl and insert into the index."""
     dead_end = DeadEnd(**entry.model_dump())
-    created_at_val = dead_end.created_at.isoformat() if not _USE_POSTGRES else dead_end.created_at
+    row = dead_end.model_dump()
+    row["created_at"] = dead_end.created_at.isoformat()
+    row["agent"] = dead_end.agent.value if dead_end.agent else None
 
-    with _conn() as conn:
-        _execute(
-            conn,
-            """INSERT INTO dead_ends
-               (id, repo, path, approach, reason, turns_wasted, agent, version, task_id, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                dead_end.id,
-                dead_end.repo,
-                dead_end.path,
-                dead_end.approach,
-                dead_end.reason,
-                dead_end.turns_wasted,
-                dead_end.agent.value if dead_end.agent else None,
-                dead_end.version,
-                dead_end.task_id,
-                created_at_val,
-            ),
-        )
+    jsonl_row = {k: v for k, v in row.items() if v is not None}
+    jsonl_row.pop("relevance_score", None)
+
+    with _jsonl_path(store).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(jsonl_row, ensure_ascii=False) + "\n")
+
+    conn = _open(store)
+    try:
+        _insert_row(conn, row)
+        conn.commit()
+    finally:
+        conn.close()
     return dead_end
 
 
+def _row_to_dead_end(row: dict) -> DeadEnd:
+    created = row["created_at"]
+    if isinstance(created, str):
+        created = datetime.fromisoformat(created)
+    return DeadEnd(
+        id=row["id"],
+        repo=row["repo"],
+        path=row.get("path"),
+        approach=row["approach"],
+        reason=row.get("reason"),
+        turns_wasted=row.get("turns_wasted"),
+        agent=row.get("agent"),
+        version=row.get("version"),
+        task_id=row.get("task_id"),
+        created_at=created,
+    )
+
+
 def query_dead_ends(
-    repo: str,
-    path: Optional[str] = None,
-    approach: Optional[str] = None,
-    agent: Optional[str] = None,
+    store: Path,
+    repo: str | None = None,
+    path: str | None = None,
+    approach: str | None = None,
+    agent: str | None = None,
     limit: int = 10,
 ) -> list[DeadEnd]:
-    clauses = ["repo = ?"]
-    params: list = [repo]
-
+    clauses: list[str] = []
+    params: list = []
+    if repo:
+        clauses.append("repo = ?")
+        params.append(repo)
     if path:
         clauses.append("path LIKE ?")
         params.append(f"{path}%")
-
     if agent:
         clauses.append("agent = ?")
         params.append(agent)
 
-    where = " AND ".join(clauses)
-    sql = f"SELECT * FROM dead_ends WHERE {where} ORDER BY created_at DESC LIMIT ?"
-    params.append(limit)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    sql = f"SELECT * FROM dead_ends{where} ORDER BY created_at DESC"
 
-    with _conn() as conn:
-        rows = _fetchall(conn, sql, params)
+    conn = _open(store)
+    try:
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    finally:
+        conn.close()
 
     results = [_row_to_dead_end(r) for r in rows]
 
-    # Client-side keyword filtering on approach (simple but effective for v0.1)
     if approach:
         keywords = approach.lower().split()
         scored = []
@@ -293,86 +301,54 @@ def query_dead_ends(
         scored.sort(key=lambda d: d.relevance_score or 0, reverse=True)
         return scored[:limit]
 
-    return results
+    return results[:limit]
 
 
-def find_similar_patterns(
-    approach: str, exclude_repo: Optional[str] = None, limit: int = 5
-) -> list[SimilarPattern]:
-    """Find dead ends from other repos with similar approach text."""
-    keywords = approach.lower().split()
-    if not keywords:
-        return []
-
-    with _conn() as conn:
-        if exclude_repo:
-            rows = _fetchall(
-                conn,
-                "SELECT repo, approach, reason, turns_wasted FROM dead_ends WHERE repo != ? ORDER BY created_at DESC LIMIT 500",
-                (exclude_repo,),
-            )
-        else:
-            rows = _fetchall(
-                conn,
-                "SELECT repo, approach, reason, turns_wasted FROM dead_ends ORDER BY created_at DESC LIMIT 500",
-            )
-
-    scored = []
-    for r in rows:
-        text = r["approach"].lower()
-        hits = sum(1 for kw in keywords if kw in text)
-        if hits > 0:
-            scored.append(
-                (
-                    hits / len(keywords),
-                    SimilarPattern(
-                        repo=r["repo"],
-                        approach=r["approach"],
-                        reason=r["reason"],
-                        turns_wasted=r["turns_wasted"],
-                    ),
-                )
-            )
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [sp for _, sp in scored[:limit]]
+def get_dead_end(store: Path, id_: str) -> DeadEnd | None:
+    conn = _open(store)
+    try:
+        row = conn.execute("SELECT * FROM dead_ends WHERE id = ?", (id_,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return _row_to_dead_end(dict(row))
 
 
-def get_repo_insights(repo: str) -> Optional[RepoInsight]:
-    # Postgres uses STRING_AGG, SQLite uses GROUP_CONCAT
-    group_concat_fn = "STRING_AGG(DISTINCT path, ',')" if _USE_POSTGRES else "GROUP_CONCAT(DISTINCT path)"
+def recent_dead_ends(store: Path, limit: int = 10) -> list[DeadEnd]:
+    return query_dead_ends(store, limit=limit)
 
-    with _conn() as conn:
-        total = _fetchone(
-            conn, "SELECT COUNT(*) as cnt FROM dead_ends WHERE repo = ?", (repo,)
-        )
 
+def get_repo_insights(store: Path, repo: str) -> RepoInsight | None:
+    conn = _open(store)
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM dead_ends WHERE repo = ?", (repo,)
+        ).fetchone()
         if not total or total["cnt"] == 0:
             return None
 
-        total_turns = _fetchone(
-            conn,
+        total_turns = conn.execute(
             "SELECT COALESCE(SUM(turns_wasted), 0) as s FROM dead_ends WHERE repo = ?",
             (repo,),
-        )
+        ).fetchone()
 
-        avg_turns = _fetchone(
-            conn,
-            "SELECT COALESCE(AVG(turns_wasted), 0) as a FROM dead_ends WHERE repo = ? AND turns_wasted IS NOT NULL",
+        avg_turns = conn.execute(
+            "SELECT COALESCE(AVG(turns_wasted), 0) as a FROM dead_ends "
+            "WHERE repo = ? AND turns_wasted IS NOT NULL",
             (repo,),
-        )
+        ).fetchone()
 
-        top_rows = _fetchall(
-            conn,
-            f"""SELECT approach, reason, COUNT(*) as occ,
+        top_rows = conn.execute(
+            """SELECT approach, reason, COUNT(*) as occ,
                       COALESCE(SUM(turns_wasted), 0) as tw,
-                      {group_concat_fn} as paths
+                      GROUP_CONCAT(DISTINCT path) as paths
                FROM dead_ends WHERE repo = ?
                GROUP BY LOWER(approach), approach, reason
                ORDER BY occ DESC, tw DESC
                LIMIT 10""",
             (repo,),
-        )
+        ).fetchall()
 
         top_dead_ends = [
             DeadEndSummary(
@@ -385,27 +361,23 @@ def get_repo_insights(repo: str) -> Optional[RepoInsight]:
             for r in top_rows
         ]
 
-        path_rows = _fetchall(
-            conn,
+        path_rows = conn.execute(
             """SELECT path, COUNT(*) as cnt, COALESCE(SUM(turns_wasted), 0) as tw
                FROM dead_ends WHERE repo = ? AND path IS NOT NULL
                GROUP BY path ORDER BY cnt DESC LIMIT 10""",
             (repo,),
-        )
+        ).fetchall()
 
         paths = [
-            PathSummary(
-                path=r["path"], dead_end_count=r["cnt"], total_turns_wasted=r["tw"]
-            )
+            PathSummary(path=r["path"], dead_end_count=r["cnt"], total_turns_wasted=r["tw"])
             for r in path_rows
         ]
 
-        agent_rows = _fetchall(
-            conn,
+        agent_rows = conn.execute(
             """SELECT COALESCE(agent, 'unknown') as a, COUNT(*) as cnt
                FROM dead_ends WHERE repo = ? GROUP BY COALESCE(agent, 'unknown')""",
             (repo,),
-        )
+        ).fetchall()
 
         agents = {r["a"]: r["cnt"] for r in agent_rows}
 
@@ -418,53 +390,5 @@ def get_repo_insights(repo: str) -> Optional[RepoInsight]:
             most_common_paths=paths,
             agent_breakdown=agents,
         )
-
-
-def create_user(username: str) -> tuple[str, str]:
-    """Create a new user. Returns (username, plaintext_api_key). Key is shown once."""
-    api_key = secrets.token_hex(32)
-    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-    user_id = secrets.token_hex(8)
-    created_at = datetime.now(timezone.utc)
-    created_at_val = created_at.isoformat() if not _USE_POSTGRES else created_at
-
-    with _conn() as conn:
-        try:
-            _execute(
-                conn,
-                "INSERT INTO users (id, username, api_key_hash, created_at) VALUES (?, ?, ?, ?)",
-                (user_id, username, api_key_hash, created_at_val),
-            )
-        except Exception as e:
-            if "UNIQUE" in str(e) or "unique" in str(e) or "duplicate" in str(e).lower():
-                raise ValueError(f"Username '{username}' is already taken")
-            raise
-
-    logger.info("REGISTERED username=%s", username)
-    return username, api_key
-
-
-def verify_api_key(api_key: str) -> Optional[str]:
-    """Return the username if the key is valid, else None."""
-    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-    with _conn() as conn:
-        row = _fetchone(conn, "SELECT username FROM users WHERE api_key_hash = ?", (api_key_hash,))
-    return row["username"] if row else None
-
-
-def _row_to_dead_end(row: dict) -> DeadEnd:
-    created = row["created_at"]
-    if isinstance(created, str):
-        created = datetime.fromisoformat(created)
-    return DeadEnd(
-        id=row["id"],
-        repo=row["repo"],
-        path=row["path"],
-        approach=row["approach"],
-        reason=row["reason"],
-        turns_wasted=row["turns_wasted"],
-        agent=row["agent"],
-        version=row["version"],
-        task_id=row["task_id"],
-        created_at=created,
-    )
+    finally:
+        conn.close()

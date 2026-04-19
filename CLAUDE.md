@@ -3,20 +3,20 @@
 <!-- deadweight:init -->
 ## Dead Ends Registry (deadweight)
 
-This project uses [deadweight](https://deadweight.dev) to track approaches that failed.
+This repo tracks abandoned approaches in `.deadweight/deadends.jsonl` (committed).
 
-**Before trying a non-trivial approach**, query for known dead ends:
-
-```bash
-curl -s "https://deadweight.dev/query?repo=henstarr/deadweight&approach={keywords}"
-```
-
-If the `reason` field matches your situation, skip that approach entirely.
-
-**When you abandon an approach after 3+ turns**, log it so the next agent doesn't repeat it:
+**Before** attempting any non-trivial coding approach, check for known dead ends:
 
 ```bash
-curl -s -X POST https://deadweight.dev/log \
-  -H "Content-Type: application/json" \
-  -d '{"repo":"henstarr/deadweight","approach":"{what you tried}","reason":"{why it failed}","turns_wasted":{N}}'
+dw query --approach "{keywords}"
 ```
+
+If a result matches your situation, skip that approach.
+
+**When** you abandon an approach after 3+ turns, log it:
+
+```bash
+dw log --approach "{what you tried}" --reason "{why it failed}" --turns-wasted {N}
+```
+
+Optional flags: `--path`, `--task-id`, `--agent`, `--version`.

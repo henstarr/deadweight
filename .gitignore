@@ -11,6 +11,10 @@ build/
 .venv/
 venv/
 results/
-*.jsonl
 .ruff_cache/
 .pytest_cache/
+
+# .deadweight/ rules: keep jsonl source-of-truth, ignore local sqlite index
+.deadweight/*.db
+.deadweight/*.db-*
+

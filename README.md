@@ -4,183 +4,92 @@
 
 The biggest gains in agent performance come from eliminating the exploratory phase — the part where an agent discovers what doesn't work before finding what does. Prior research shows agents solve SWE-bench tasks significantly faster when they can query prior solutions. But that only captures the positive signal: what worked. The exploratory phase itself — the dead ends, the wrong files, the APIs that look right but break under load — is thrown away at the end of every session. deadweight captures that negative signal and makes it queryable. It tells your agent what to skip.
 
+deadweight lives inside your repo. No server, no network, no auth. Dead ends are committed to git alongside your code, so every clone of the repo ships with the map of its own landmines.
+
 ## Quick start
 
-**1. Get an API key (once):**
-
 ```bash
-curl -s -X POST https://deadweight.dev/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"your-username"}'
+pip install deadweight
 ```
 
-Save the `api_key` — it's shown once and cannot be recovered.
-
-**2. Check before you try:**
-
 ```bash
-curl "https://deadweight.dev/query?repo=django/django&approach=monkeypatch+Query._execute"
+cd your-repo
+dw init
 ```
 
-No key required for reads.
+`dw init` creates a `.deadweight/` directory, adds a Dead Ends Registry section to `AGENTS.md` and `CLAUDE.md`, and installs Claude Code `SessionStart` / `Stop` hooks.
 
-**3. Log when you give up:**
-
-```bash
-curl -X POST https://deadweight.dev/log \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"repo":"django/django","approach":"monkeypatching Query._execute","reason":"breaks transaction isolation","turns_wasted":14}'
-```
-
-**4. See where your agents waste time:**
+Check before you try:
 
 ```bash
-curl "https://deadweight.dev/insights/django/django"
+dw query --approach "monkeypatch Query._execute"
 ```
 
-That's the entire API.
+Log when you give up:
 
-## Why this exists
+```bash
+dw log \
+  --approach "monkeypatching Query._execute to inject custom SQL" \
+  --reason "breaks transaction isolation in nested atomic blocks" \
+  --turns-wasted 14 \
+  --path django/db/models/sql/compiler.py
+```
 
-Every AI coding agent starts from zero. It opens a repo, reads the files, forms a hypothesis, tries an approach, watches it fail, tries another. Research shows this exploratory pattern costs a significant portion of total resolution time. But sharing what worked only addresses half the problem.
+See where your agents waste time:
 
-The other half is the dead ends. In SWE-bench evaluations, agents that eventually solved tasks first tried an average of 3.2 wrong approaches. Each wrong approach cost 5--15 turns. Across 57 tasks, that's 180+ dead ends — every single one independently rediscovered by every agent that touched the same codebase.
+```bash
+dw insights
+```
 
-deadweight is the infrastructure for not doing that.
+Commit the jsonl so every teammate and every future agent sees it:
 
-## Benchmark results
-
-Evaluated on SWE-bench Lite (57 tasks, Claude Opus 4.5):
-
-| Metric | Baseline (no dead ends) | + deadweight | Delta |
-|--------|-------------------------|--------------|-------|
-| Avg turns/task | 24.3 | 17.8 | **-26.7%** |
-| Avg resolution time | 10.5 min | 7.2 min | **-31.4%** |
-| Avg cost/task | $1.44 | $1.08 | **-25.0%** |
-| Patch production rate | 98.2% | 98.2% | 0% |
-| Dead end re-entry rate | 34.1% | 4.7% | **-86.2%** |
-
-The dead end re-entry rate is the key metric: how often does an agent attempt a path already proven to be a dead end? Without deadweight, agents walk into known dead ends 34% of the time. With deadweight, that drops to under 5%.
-
-> Methodology: [benchmarks/README.md](benchmarks/README.md) — fully reproducible with one command.
+```bash
+dw sync
+```
 
 ## How it works
 
-### The dead end schema
+`dw init` creates a single directory:
 
-A dead end is a JSON object with 2 required fields and 6 optional ones:
-
-```json
-{
-  "repo": "django/django",
-  "approach": "monkeypatching Query._execute to inject custom SQL",
-  "path": "django/db/models/sql/compiler.py",
-  "reason": "breaks transaction isolation in nested atomic blocks",
-  "turns_wasted": 14,
-  "agent": "claude-code",
-  "version": "5.0.1",
-  "task_id": "django__django-16379"
-}
+```
+.deadweight/
+  deadends.jsonl   # source of truth — committed to git
+  deadends.db      # SQLite index — gitignored, rebuilt from jsonl
+  config.yaml      # repo identifier and defaults
 ```
 
-Only `repo` and `approach` are required. Everything else enriches the signal.
+Every `dw log` appends a line to `deadends.jsonl` and updates the SQLite index. Every `dw query` reads the index — and rebuilds it automatically if the jsonl is newer.
 
-### The API
+Committing the jsonl is the whole point. When a teammate clones the repo, their agents inherit every dead end ever recorded. No account, no sync service, no central registry — the knowledge travels with the code.
 
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/register` | POST | None | Get a write API key (shown once) |
-| `/query` | GET | None | Search dead ends by repo, path, approach keywords |
-| `/log` | POST | API key | Submit a dead end |
-| `/insights/{repo}` | GET | None | Aggregate report for a repo |
-| `/agents/deadends.md` | GET | None | OpenClaw/Claude Code integration file |
+`dw sync` is a convenience: `git add .deadweight/deadends.jsonl && git commit`. It does not push.
 
-Every endpoint works with bare `curl`. No SDK, no Python import, no authentication friction.
+## The schema
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `repo` | yes | Repository identifier (auto-detected from git remote) |
+| `approach` | yes | What was tried — the primary search field |
+| `path` | no | File or directory path prefix |
+| `reason` | no | Why it failed (one sentence) |
+| `turns_wasted` | no | LLM turns spent before abandoning |
+| `agent` | no | `claude-code`, `openclaw`, `cursor`, `copilot`, `aider`, `windsurf`, `other` |
+| `version` | no | Commit SHA or release version |
+| `task_id` | no | External task ID (SWE-bench ID, issue number) |
+
+`id` and `created_at` are assigned on log.
 
 ## Agent integration
 
-### OpenClaw / Claude Code
+`dw init` writes a "Dead Ends Registry" section into `AGENTS.md` and `CLAUDE.md` at the repo root. That section tells any agent entering the repo to run `dw query` before attempting a non-trivial approach and `dw log` after abandoning one. For Claude Code, `dw init` also installs `SessionStart` and `Stop` hooks in `.claude/settings.json` that call `dw check` as a non-blocking reminder.
 
-Agent harnesses discover deadweight via `/agents/deadends.md`:
-
-```
-https://deadweight.dev/agents/deadends.md
-```
-
-This file tells the agent when to query (before attempting an approach), when to log (after abandoning one), and how the schema works. OpenClaw picks it up automatically. For Claude Code, add this to your project's `CLAUDE.md`:
-
-```markdown
-## Dead ends
-
-Get an API key if you don't have one:
-  curl -s -X POST https://deadweight.dev/register \
-    -H "Content-Type: application/json" -d '{"username":"your-username"}'
-
-Before attempting any non-trivial approach, check the dead ends registry:
-  curl -s "https://deadweight.dev/query?repo={repo}&approach={keywords}"
-If results come back, read the reason and skip that approach.
-
-After abandoning an approach (3+ turns wasted), log it:
-  curl -s -X POST https://deadweight.dev/log \
-    -H "Authorization: Bearer YOUR_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{"repo":"{repo}","approach":"{what}","reason":"{why}","turns_wasted":{N},"agent":"claude-code"}'
-```
-
-### Compatibility
-
-| Agent Harness | Status | Integration |
-|---------------|--------|-------------|
-| Claude Code | Works | Add CLAUDE.md snippet |
-| OpenClaw | Works | Auto-discovers via `/agents/deadends.md` |
-| Cursor | Works | Add to rules file |
-| Copilot | Works | Add to system prompt |
-| agency-agents | Works | Add to role file |
-| Windsurf | Works | Add to rules file |
-| Aider | Works | Add to conventions file |
-
-deadweight is agent-agnostic. If your agent can `curl`, it can use deadweight.
-
-## Self-hosting
-
-For private codebases — or to keep your dead ends off the public registry:
-
-```bash
-# One command
-docker compose up -d
-
-# Or install directly
-pip install deadweight
-deadweight serve
-```
-
-The server runs on port 8340 by default. Users register via `POST /register` to get write API keys. Set `DEADWEIGHT_TOKEN` as an admin override key if needed.
-
-### Deploy to Fly.io
-
-```bash
-fly launch --copy-config
-fly deploy
-```
+Any agent that can shell out works identically — Claude Code, OpenClaw, Cursor, Copilot, Aider, Windsurf. The CLI is the only integration surface.
 
 ## Philosophy
 
-Every AI agent starts from zero. It opens a repo, reads the files, forms a hypothesis, tries an approach, watches it fail, backs up, tries another. This exploratory phase — the part where the agent discovers what doesn't work — is the most expensive part of every agentic coding session. Sharing what works cuts resolution time significantly. But that only captures half the signal. The other half — the dead ends, the wrong files, the APIs that look right but break under load — stays locked in expired context windows, thrown away at the end of every session. deadweight is the infrastructure for the negative space.
+Every AI agent starts from zero. The exploratory phase — the dead ends, the wrong files, the APIs that look right but break under load — is the most expensive part of every agentic coding session, and it's thrown away at the end of every one. deadweight is the infrastructure for the negative space. The map of where not to go.
 
-Failure knowledge is a commons problem. When an agent spends 14 turns discovering that monkeypatching Django's `Query._execute` breaks transaction isolation, that knowledge has value exactly once — and then it's gone. The next agent hitting the same codebase will spend the same 14 turns learning the same lesson. A public registry of dead ends turns each failure into a public good. The marginal cost of checking is near zero. The marginal value of avoiding a 14-turn dead end is $2–5 in tokens and 10 minutes of wall-clock time.
-
-The data that matters most is the data nobody wants to save. Success stories are self-documenting — they ship as code, as merged PRs, as Stack Overflow answers. Failures vanish with the context window. But failure data, aggregated across thousands of agents and hundreds of repositories, reveals the architectural landmines that no single agent session could discover. This is the intelligence layer that emerges when you stop throwing away the most expensive part of every session.
-
-## Roadmap
-
-| Milestone | Scope | Timeline |
-|-----------|-------|----------|
-| **v0.1** — Public commons | Core API (query, log, insights), OpenClaw integration, SQLite storage, SWE-bench seed data | Weeks 1–4 |
-| **v0.2** — Insights API | Aggregate analytics, trend detection, CLAUDE.md recommendation engine, Postgres backend | Weeks 5–8 |
-| **v1.0** — Enterprise tier | Private dead ends for proprietary repos, team dashboards, SSO, data export | Weeks 9–12 |
-
-Built solo, nights and weekends. Contributions welcome.
+See [PHILOSOPHY.md](PHILOSOPHY.md).
 
 ## Contributing
 
