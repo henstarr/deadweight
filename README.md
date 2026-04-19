@@ -2,7 +2,7 @@
   <img width="1774" height="887" alt="deadweight" src="https://github.com/user-attachments/assets/173807dc-515b-466d-88e1-0f93812f19af" />
 </p>
 
-**The map of where not to go.** Your agent just spent 14 turns doing something stupid The next agent will repeat it. Deadweight is a repo-local registry of dead ends — approaches that didn't work — committed to git alongside your code. Every clone inherits the landmine map.
+**The map of where not to go.** Your agent just spent 14 turns doing something stupid. The next agent will repeat it. Deadweight is a repo-local registry of dead ends — approaches that didn't work — committed to git alongside your code. Every clone inherits the landmine map.
 
 No server. No network. No auth. Just a jsonl file and a CLI.
 
