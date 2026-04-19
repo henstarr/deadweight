@@ -16,7 +16,7 @@ If either is present, skip to the query/log workflow below.
 ## If not configured: initialize it
 
 ```bash
-pip install deadweight && dw init
+uv tool install deadweight && dw init
 ```
 
 `dw init` creates `.deadweight/` (with `deadends.jsonl` and a SQLite index), appends a Dead Ends Registry section to `AGENTS.md` and `CLAUDE.md`, and installs Claude Code `SessionStart` / `Stop` hooks in `.claude/settings.json`. It auto-detects the repo name from the git remote. Run once, commit the result.

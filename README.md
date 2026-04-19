@@ -2,102 +2,73 @@
   <img width="1774" height="887" alt="deadweight" src="https://github.com/user-attachments/assets/173807dc-515b-466d-88e1-0f93812f19af" />
 </p>
 
-The biggest gains in agent performance come from eliminating the exploratory phase — the part where an agent discovers what doesn't work before finding what does. Prior research shows agents solve SWE-bench tasks significantly faster when they can query prior solutions. But that only captures the positive signal: what worked. The exploratory phase itself — the dead ends, the wrong files, the APIs that look right but break under load — is thrown away at the end of every session. deadweight captures that negative signal and makes it queryable. It tells your agent what to skip.
+**The map of where not to go.** Your agent just spent 14 turns monkeypatching `Query._execute` before giving up. The next agent will repeat it. deadweight is a repo-local registry of dead ends — approaches that didn't work — committed to git alongside your code. Every clone inherits the landmine map.
 
-deadweight lives inside your repo. No server, no network, no auth. Dead ends are committed to git alongside your code, so every clone of the repo ships with the map of its own landmines.
+No server. No network. No auth. Just a jsonl file and a CLI.
+
+## Install
+
+```bash
+uv tool install deadweight
+```
+
+Installs `dw` on your PATH.
 
 ## Quick start
 
 ```bash
-pip install deadweight
-```
-
-```bash
 cd your-repo
-dw init
-```
+dw init                                   # creates .deadweight/, wires AGENTS.md + CLAUDE.md, installs hooks
 
-`dw init` creates a `.deadweight/` directory, adds a Dead Ends Registry section to `AGENTS.md` and `CLAUDE.md`, and installs Claude Code `SessionStart` / `Stop` hooks.
+dw query --approach "monkeypatch Query._execute"   # before you try
 
-Check before you try:
-
-```bash
-dw query --approach "monkeypatch Query._execute"
-```
-
-Log when you give up:
-
-```bash
 dw log \
-  --approach "monkeypatching Query._execute to inject custom SQL" \
-  --reason "breaks transaction isolation in nested atomic blocks" \
-  --turns-wasted 14 \
-  --path django/db/models/sql/compiler.py
+  --approach "monkeypatching Query._execute" \
+  --reason "breaks transaction isolation" \
+  --turns-wasted 14                       # after you give up
+
+dw sync                                   # git add + commit the jsonl
 ```
 
-See where your agents waste time:
-
-```bash
-dw insights
-```
-
-Commit the jsonl so every teammate and every future agent sees it:
-
-```bash
-dw sync
-```
+Run `dw --help` for the rest (`list`, `show`, `insights`, `rebuild`).
 
 ## How it works
-
-`dw init` creates a single directory:
 
 ```
 .deadweight/
   deadends.jsonl   # source of truth — committed to git
-  deadends.db      # SQLite index — gitignored, rebuilt from jsonl
-  config.yaml      # repo identifier and defaults
+  deadends.db      # SQLite index — gitignored, auto-rebuilt
+  config.yaml      # repo id, sync branch
 ```
 
-Every `dw log` appends a line to `deadends.jsonl` and updates the SQLite index. Every `dw query` reads the index — and rebuilds it automatically if the jsonl is newer.
+Writes append to the jsonl. Reads hit the SQLite index, which auto-rebuilds when the jsonl is newer (e.g. after `git pull`). Committing the jsonl is the whole point: dead-end knowledge travels with the code.
 
-Committing the jsonl is the whole point. When a teammate clones the repo, their agents inherit every dead end ever recorded. No account, no sync service, no central registry — the knowledge travels with the code.
+## Schema
 
-`dw sync` is a convenience: `git add .deadweight/deadends.jsonl && git commit`. It does not push.
-
-## The schema
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `repo` | yes | Repository identifier (auto-detected from git remote) |
+| Field | Required | Notes |
+|-------|----------|-------|
+| `repo` | yes | Auto-detected from git remote |
 | `approach` | yes | What was tried — the primary search field |
-| `path` | no | File or directory path prefix |
+| `path` | no | File or directory prefix |
 | `reason` | no | Why it failed (one sentence) |
 | `turns_wasted` | no | LLM turns spent before abandoning |
 | `agent` | no | `claude-code`, `openclaw`, `cursor`, `copilot`, `aider`, `windsurf`, `other` |
-| `version` | no | Commit SHA or release version |
-| `task_id` | no | External task ID (SWE-bench ID, issue number) |
-
-`id` and `created_at` are assigned on log.
+| `version` | no | Commit SHA or release |
+| `task_id` | no | External task id (SWE-bench, issue #) |
 
 ## Agent integration
 
-`dw init` writes a "Dead Ends Registry" section into `AGENTS.md` and `CLAUDE.md` at the repo root. That section tells any agent entering the repo to run `dw query` before attempting a non-trivial approach and `dw log` after abandoning one. For Claude Code, `dw init` also installs `SessionStart` and `Stop` hooks in `.claude/settings.json` that call `dw check` as a non-blocking reminder.
-
-Any agent that can shell out works identically — Claude Code, OpenClaw, Cursor, Copilot, Aider, Windsurf. The CLI is the only integration surface.
+`dw init` appends a Dead Ends Registry section to `AGENTS.md` and `CLAUDE.md`, and installs Claude Code `SessionStart` + `Stop` hooks that remind the agent to query before trying and log after giving up. Any agent that can shell out works identically — Claude Code, OpenClaw, Cursor, Copilot, Aider, Windsurf.
 
 ## Philosophy
 
-Every AI agent starts from zero. The exploratory phase — the dead ends, the wrong files, the APIs that look right but break under load — is the most expensive part of every agentic coding session, and it's thrown away at the end of every one. deadweight is the infrastructure for the negative space. The map of where not to go.
-
-See [PHILOSOPHY.md](PHILOSOPHY.md).
+Every AI agent starts from zero — rediscovering every landmine in the repo. deadweight is the infrastructure for the negative space. See [PHILOSOPHY.md](PHILOSOPHY.md).
 
 ## Contributing
 
 ```bash
-git clone https://github.com/henstarr/deadweight
-cd deadweight
-pip install -e ".[dev]"
-pytest
+uv sync --extra dev
+uv run pytest
 ```
 
 ## License

@@ -83,22 +83,24 @@ check deadweight before attempting and skip logged dead ends.
 
 ## Reproducing
 
+> Note: this harness was written against the old hosted API. See `benchmarks/TODO.md` — the eval scripts need to be ported to the `dw` CLI before the numbers can be reproduced.
+
 ```bash
 cd benchmarks/
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # Phase 1: Run control arm and seed dead ends
-python run_eval.py --arm control --tasks swe-bench-lite --output results/control_r1/
+uv run python run_eval.py --arm control --tasks swe-bench-lite --output results/control_r1/
 
 # Seed the registry from transcripts
-python seed_from_transcripts.py --input results/control_r1/ --output deadweight_seed.jsonl
+uv run python seed_from_transcripts.py --input results/control_r1/ --output deadweight_seed.jsonl
 
 # Phase 2: Run treatment arm
-python run_eval.py --arm treatment --tasks swe-bench-lite --deadweight-seed deadweight_seed.jsonl --output results/treatment/
+uv run python run_eval.py --arm treatment --tasks swe-bench-lite --deadweight-seed deadweight_seed.jsonl --output results/treatment/
 
 # Phase 3: Run control arm again
-python run_eval.py --arm control --tasks swe-bench-lite --output results/control_r2/
+uv run python run_eval.py --arm control --tasks swe-bench-lite --output results/control_r2/
 
 # Analyze
-python analyze.py --control results/control_r2/ --treatment results/treatment/ --output results/report.md
+uv run python analyze.py --control results/control_r2/ --treatment results/treatment/ --output results/report.md
 ```
