@@ -1,0 +1,4 @@
+# deadweight config — committed to git so all clones agree
+repo: henstarr/deadweight
+schema_version: 1
+sync_branch: deadweight-sync

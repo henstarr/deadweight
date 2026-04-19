@@ -9,10 +9,10 @@ No server. No network. No auth. Just a jsonl file and a CLI.
 ## Install
 
 ```bash
-uv tool install deadweight
+uv tool install git+https://github.com/henstarr/deadweight
 ```
 
-Installs `dw` on your PATH.
+Installs `dw` on your PATH. Pin a ref with `@v0.1.0` or `@<sha>` if you want reproducibility.
 
 ## Quick start
 

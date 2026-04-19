@@ -1,0 +1,3 @@
+# Local SQLite index — rebuildable from deadends.jsonl
+*.db
+*.db-*
