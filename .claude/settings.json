@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dw check --session-start && dw list --limit 5"
+            "command": "/Users/henstarr/.local/bin/dw check --session-start && /Users/henstarr/.local/bin/dw list --limit 5"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dw check"
+            "command": "/Users/henstarr/.local/bin/dw check"
           }
         ]
       }

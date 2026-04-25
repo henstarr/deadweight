@@ -45,6 +45,8 @@ class DeadEnd(DeadEndCreate):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+    resolved: bool = Field(False, description="Whether this dead end has been marked resolved")
+    resolved_at: datetime | None = Field(None, description="When this dead end was resolved")
     relevance_score: float | None = Field(
         None, description="Search relevance score (populated on queries)"
     )

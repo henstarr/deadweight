@@ -2,7 +2,9 @@
   <img width="1774" height="887" alt="deadweight" src="https://github.com/user-attachments/assets/173807dc-515b-466d-88e1-0f93812f19af" />
 </p>
 
-**The map of where not to go.** Your agent just spent 14 turns doing something stupid. The next agent will repeat it. deadweight is a repo-local registry of dead ends — approaches that didn't work — committed to git alongside your code. Every clone inherits the landmine map.
+**The map of where not to go.** Five developers on a team using AI coding agents. One of them hits a dead end — monkeypatching breaks test isolation, some internal API doesn't behave as documented, the ORM's eager-loading causes N+1s in a non-obvious place. They spend 14 turns discovering this. The next developer's agent spends 14 more turns discovering the exact same thing. deadweight stops that.
+
+It's a repo-local registry of dead ends — approaches that didn't work — committed to git alongside your code. Every clone inherits the map. Every agent (Claude Code, Cursor, Copilot, aider, whatever) that can shell out benefits from it.
 
 No server. No network. No auth. Just a `.jsonl` file and a CLI.
 
@@ -48,12 +50,12 @@ def67890  owner/repo  direct SQLite writes to bypass ORM
 ...
 ```
 
-Claude sees the count and the 5 most recent dead ends before writing a single line of code.
+Claude sees the count and relevant dead ends before writing a single line of code. If files are changed in your working tree, the hook surfaces dead ends matching those paths first; otherwise it shows the 5 most recent.
 
 **On session end** (`Stop` hook):
 
 ```
-[deadweight] 3 dead ends on record. If you abandoned an approach this session, log it with `dw log`.
+[deadweight] 3 dead ends on record. Log any abandoned approaches with `dw log`.
 ```
 
 A short reminder to log anything that failed before closing out.
@@ -68,7 +70,7 @@ Both hooks are non-blocking — they never prevent Claude from responding.
 dw query --approach "monkeypatch Query._execute"
 ```
 
-If a match comes back, skip it. The reason is in the record.
+If a match comes back, skip it. The reason is in the record. Search covers both the approach description and the failure reason.
 
 **After giving up on an approach (3+ turns wasted):**
 
@@ -79,12 +81,24 @@ dw log \
   --turns-wasted 14
 ```
 
-**Commit so teammates (and future agents) inherit the map:**
+`dw log` writes to disk immediately — the entry is available to every agent in the same clone right away.
+
+**Share with your team:**
 
 ```bash
 dw sync          # git add + commit the jsonl
 git push
 ```
+
+`dw sync` is only needed when you want to push the knowledge to a shared remote. `dw log` already persists locally — teammates on the same machine or in the same clone see it immediately after `git pull` triggers an automatic index rebuild.
+
+**If an approach is unblocked (library update, code change):**
+
+```bash
+dw update <id> --resolved
+```
+
+Marks the dead end as resolved. It stops appearing in queries and at session start. The history is preserved in the JSONL for auditing.
 
 ## All commands
 
@@ -92,11 +106,12 @@ git push
 |---------|-------------|
 | `dw init` | Set up `.deadweight/`, inject docs, install hooks |
 | `dw log --approach "..." --reason "..." --turns-wasted N` | Record a dead end |
-| `dw query --approach "..."` | Search dead ends by approach (full-text) |
-| `dw list` | Recent dead ends (default: 20) |
+| `dw query --approach "..."` | Search dead ends (FTS with BM25 ranking) |
+| `dw update <id> --resolved` | Mark a dead end as resolved |
+| `dw list` | Recent unresolved dead ends (default: 20) |
 | `dw show <id>` | Full JSON for one entry |
 | `dw insights` | Aggregate report: total turns wasted, hot paths, agent breakdown |
-| `dw sync` | `git add` + commit the jsonl |
+| `dw sync` | `git add` + commit the jsonl (for sharing; `dw log` already persists locally) |
 | `dw rebuild` | Rebuild SQLite index from jsonl (runs automatically on `git pull`) |
 | `dw check` | One-line status used by hooks |
 
@@ -109,7 +124,19 @@ git push
   config.yaml      # repo id, sync branch
 ```
 
-Writes append to the jsonl. Reads hit the SQLite index, which rebuilds itself whenever the jsonl is newer (e.g. after `git pull`). Committing the jsonl is the whole point — dead-end knowledge travels with the code.
+Writes append to the jsonl. Reads hit the SQLite FTS5 index, which rebuilds itself whenever the jsonl is newer (e.g. after `git pull`). Search uses BM25 ranking over both the approach and reason fields — a query for "module import failure" will match entries that describe it differently.
+
+Committing the jsonl is the whole point — dead-end knowledge travels with the code.
+
+## Cross-agent sharing
+
+The `agent` field tracks which tool logged a dead end. An approach abandoned by Cursor gets seen by Claude Code in the same repo. A dead end logged by one developer's aider session shows up at the next developer's session start. The JSONL is the shared memory layer.
+
+```bash
+dw log --approach "..." --agent cursor
+```
+
+`dw query` and `dw list` show all entries regardless of which agent logged them. You can filter with `--agent` if needed.
 
 ## Schema
 
@@ -117,9 +144,9 @@ Writes append to the jsonl. Reads hit the SQLite index, which rebuilds itself wh
 |-------|----------|-------|
 | `repo` | yes | Auto-detected from git remote |
 | `approach` | yes | What was tried — the primary search field |
-| `reason` | no | Why it failed |
+| `reason` | no | Why it failed (also searched by `dw query`) |
 | `turns_wasted` | no | LLM turns spent before abandoning |
-| `path` | no | File or directory the approach touched |
+| `path` | no | File or directory the approach touched (enables path-relevant hook output) |
 | `agent` | no | `claude-code`, `cursor`, `copilot`, `aider`, `windsurf`, `other` |
 | `version` | no | Commit SHA or release tag |
 | `task_id` | no | External task id (SWE-bench, issue #) |

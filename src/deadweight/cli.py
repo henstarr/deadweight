@@ -9,18 +9,21 @@ Usage:
     dw insights [--repo ...]   Aggregate report
     dw rebuild                 Rebuild SQLite index from jsonl
     dw sync                    Commit .deadweight/deadends.jsonl
+    dw update <id> --resolved  Mark a dead end as resolved
     dw check                   Summary line (used by Claude Code Stop hook)
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from . import __version__
@@ -36,6 +39,7 @@ from .db import (
     rebuild_index,
     recent_dead_ends,
     require_store,
+    update_dead_end,
 )
 from .models import DeadEndCreate
 
@@ -164,7 +168,7 @@ def _install_claude_hooks(root: Path) -> bool:
     if not _already_present(session_start, "dw check"):
         session_start.append({
             "matcher": "",
-            "hooks": [{"type": "command", "command": f"{dw_cmd} check --session-start && {dw_cmd} list --limit 5"}],
+            "hooks": [{"type": "command", "command": f"{dw_cmd} check --session-start"}],
         })
         changed = True
 
@@ -390,6 +394,43 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return 1
 
 
+def _session_file(store: Path) -> Path:
+    slug = hashlib.md5(str(store).encode()).hexdigest()[:8]
+    return Path(tempfile.gettempdir()) / f"dw-{slug}.session"
+
+
+def _get_changed_files(root: Path) -> list[str]:
+    """Return files changed in the working tree (staged + unstaged vs HEAD)."""
+    changed: set[str] = set()
+    for cmd in [
+        ["git", "diff", "--name-only", "HEAD"],
+        ["git", "diff", "--name-only", "--cached"],
+    ]:
+        try:
+            out = subprocess.check_output(cmd, cwd=root, stderr=subprocess.DEVNULL, text=True)
+            changed.update(f.strip() for f in out.splitlines() if f.strip())
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+    return list(changed)
+
+
+def _count_dead_ends(jsonl: Path) -> int:
+    """Count non-delta, non-empty JSONL lines (the actual dead end entries)."""
+    if not jsonl.exists():
+        return 0
+    n = 0
+    for line in jsonl.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            if not json.loads(stripped).get("_resolved"):
+                n += 1
+        except json.JSONDecodeError:
+            n += 1
+    return n
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     """Print a one-line reminder/summary. Used by Claude Code hooks."""
     store = find_store()
@@ -397,22 +438,67 @@ def cmd_check(args: argparse.Namespace) -> int:
         # Not initialized — stay silent so we don't nag unrelated repos
         return 0
 
-    jsonl = store / JSONL_FILE
-    n = 0
-    if jsonl.exists():
-        n = sum(1 for line in jsonl.read_text().splitlines() if line.strip())
+    n = _count_dead_ends(store / JSONL_FILE)
+    n_label = "dead end" if n == 1 else "dead ends"
+    sf = _session_file(store)
 
     if args.session_start:
+        sf.write_text("0")
         print(
-            f"[deadweight] {n} dead ends logged in this repo. "
+            f"[deadweight] {n} {n_label} logged in this repo. "
             "Query before non-trivial approaches: `dw query --approach ...`. "
             "Log abandoned approaches: `dw log --approach ...`."
         )
+
+        # Show dead ends relevant to currently changed files, falling back to recents
+        root = _find_repo_root(store.parent)
+        changed_files = _get_changed_files(root)
+        shown = []
+        if changed_files and n > 0:
+            all_des = recent_dead_ends(store, limit=200)
+            seen_ids: set[str] = set()
+            for de in all_des:
+                if de.path and any(cf.startswith(de.path) for cf in changed_files):
+                    if de.id not in seen_ids:
+                        shown.append(de)
+                        seen_ids.add(de.id)
+                    if len(shown) >= 5:
+                        break
+
+        if not shown:
+            shown = recent_dead_ends(store, limit=5)
+
+        for de in shown[:5]:
+            print(f"  {de.id}  {de.repo}  {de.approach[:80]}")
     else:
-        print(
-            f"[deadweight] {n} dead ends on record. "
-            "If you abandoned an approach this session, log it with `dw log`."
-        )
+        turn = 1
+        if sf.exists():
+            try:
+                turn = int(sf.read_text().strip()) + 1
+            except ValueError:
+                turn = 1
+        sf.write_text(str(turn))
+
+        if turn >= 3:
+            print(
+                f"[deadweight] {n} {n_label} on record. "
+                "Log any abandoned approaches with `dw log`."
+            )
+        else:
+            print(f"[deadweight] {n} {n_label} on record.")
+    return 0
+
+
+def cmd_update(args: argparse.Namespace) -> int:
+    if not args.resolved:
+        print("error: specify --resolved (or a future update flag)", file=sys.stderr)
+        return 2
+    store = require_store()
+    de = update_dead_end(store, args.id)
+    if de is None:
+        print(f"no dead end with id '{args.id}'", file=sys.stderr)
+        return 1
+    print(f"resolved {de.id}  {de.approach[:80]}")
     return 0
 
 
@@ -480,6 +566,15 @@ def _build_parser() -> argparse.ArgumentParser:
     sync_p = sub.add_parser("sync", help="git-add + commit the jsonl")
     sync_p.add_argument("-m", "--message", default=None)
     sync_p.set_defaults(func=cmd_sync)
+
+    u_p = sub.add_parser("update", help="Update a dead end (e.g. mark as resolved)")
+    u_p.add_argument("id", help="Dead end ID")
+    u_p.add_argument(
+        "--resolved",
+        action="store_true",
+        help="Mark this dead end as resolved (hides it from future queries)",
+    )
+    u_p.set_defaults(func=cmd_update)
 
     c_p = sub.add_parser("check", help="One-line status (used by Claude Code hooks)")
     c_p.add_argument("--session-start", action="store_true", dest="session_start")

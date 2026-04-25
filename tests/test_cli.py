@@ -17,12 +17,15 @@ from deadweight.db import (
     DB_FILE,
     JSONL_FILE,
     STORE_DIRNAME,
+    _FTS5_AVAILABLE,
     append_dead_end,
     find_store,
+    get_dead_end,
     get_repo_insights,
     init_store,
     query_dead_ends,
     rebuild_index,
+    update_dead_end,
 )
 from deadweight.models import DeadEndCreate
 
@@ -263,3 +266,156 @@ def test_cli_log_invalid_agent_fails(tmp_path: Path):
     _run(tmp_path, "init", "--repo", "r/repo", "--no-hooks")
     r = _run(tmp_path, "log", "--approach", "x", "--agent", "bogus-agent")
     assert r.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# FTS5 search quality
+# ---------------------------------------------------------------------------
+
+
+def test_fts_searches_reason_field(tmp_path: Path):
+    """FTS5 should match keywords in reason, not just approach."""
+    store = init_store(tmp_path, "test/repo")
+    append_dead_end(
+        store,
+        DeadEndCreate(
+            repo="test/repo",
+            approach="patching the internal cache",
+            reason="causes deadlock under concurrent writes",
+        ),
+    )
+    append_dead_end(
+        store,
+        DeadEndCreate(repo="test/repo", approach="subclassing the manager"),
+    )
+
+    results = query_dead_ends(store, repo="test/repo", approach="deadlock")
+    assert len(results) >= 1
+    assert any("cache" in r.approach for r in results)
+
+
+def test_fts_ranks_closer_matches_higher(tmp_path: Path):
+    """Entry matching more keywords should rank above entry matching fewer."""
+    store = init_store(tmp_path, "test/repo")
+    append_dead_end(
+        store, DeadEndCreate(repo="test/repo", approach="raw SQL query injection bypass")
+    )
+    append_dead_end(
+        store, DeadEndCreate(repo="test/repo", approach="raw filesystem access")
+    )
+
+    if not _FTS5_AVAILABLE:
+        return  # skip ranking check without FTS5
+
+    results = query_dead_ends(store, repo="test/repo", approach="raw SQL query")
+    assert len(results) >= 1
+    assert "SQL" in results[0].approach
+
+
+def test_fts_filters_resolved_by_default(tmp_path: Path):
+    """Resolved dead ends should not appear in query results by default."""
+    store = init_store(tmp_path, "test/repo")
+    de = append_dead_end(
+        store, DeadEndCreate(repo="test/repo", approach="using raw SQL injection")
+    )
+    update_dead_end(store, de.id)
+
+    results = query_dead_ends(store, repo="test/repo", approach="raw SQL")
+    assert all(r.id != de.id for r in results)
+
+
+def test_fts_include_resolved_flag(tmp_path: Path):
+    """include_resolved=True should surface resolved entries."""
+    store = init_store(tmp_path, "test/repo")
+    de = append_dead_end(
+        store, DeadEndCreate(repo="test/repo", approach="using raw SQL injection")
+    )
+    update_dead_end(store, de.id)
+
+    results = query_dead_ends(store, repo="test/repo", approach="raw SQL", include_resolved=True)
+    assert any(r.id == de.id for r in results)
+
+
+# ---------------------------------------------------------------------------
+# dw update --resolved
+# ---------------------------------------------------------------------------
+
+
+def test_update_resolved_storage(tmp_path: Path):
+    """Resolving a dead end marks it in SQLite and appends a delta to jsonl."""
+    store = init_store(tmp_path, "test/repo")
+    de = append_dead_end(
+        store, DeadEndCreate(repo="test/repo", approach="bad thing")
+    )
+
+    result = update_dead_end(store, de.id)
+    assert result is not None
+    assert result.resolved is True
+    assert result.resolved_at is not None
+
+    # SQLite reflects the resolution
+    fetched = get_dead_end(store, de.id)
+    assert fetched is not None
+    assert fetched.resolved is True
+
+    # JSONL contains a delta line
+    lines = [json.loads(l) for l in (store / JSONL_FILE).read_text().splitlines() if l.strip()]
+    delta_lines = [l for l in lines if l.get("_resolved")]
+    assert len(delta_lines) == 1
+    assert delta_lines[0]["id"] == de.id
+
+
+def test_update_resolved_survives_rebuild(tmp_path: Path):
+    """Resolution delta is replayed correctly on full index rebuild."""
+    store = init_store(tmp_path, "test/repo")
+    de = append_dead_end(
+        store, DeadEndCreate(repo="test/repo", approach="bad thing")
+    )
+    update_dead_end(store, de.id)
+
+    rebuild_index(store)
+
+    fetched = get_dead_end(store, de.id)
+    assert fetched is not None
+    assert fetched.resolved is True
+
+    # Should not appear in default queries
+    results = query_dead_ends(store, repo="test/repo")
+    assert all(r.id != de.id for r in results)
+
+
+def test_cli_update_resolved(tmp_path: Path):
+    """CLI: dw update <id> --resolved marks the dead end as resolved."""
+    _run(tmp_path, "init", "--repo", "r/repo", "--no-hooks")
+    r = _run(tmp_path, "log", "--approach", "bad pattern", "--json")
+    assert r.returncode == 0
+    id_ = json.loads(r.stdout)["id"]
+
+    r = _run(tmp_path, "update", id_, "--resolved")
+    assert r.returncode == 0
+    assert "resolved" in r.stdout
+
+    # Should no longer appear in list
+    r = _run(tmp_path, "list", "--json")
+    entries = json.loads(r.stdout)
+    assert all(e["id"] != id_ for e in entries)
+
+
+def test_cli_update_missing_id_fails(tmp_path: Path):
+    _run(tmp_path, "init", "--repo", "r/repo", "--no-hooks")
+    r = _run(tmp_path, "update", "nonexistentid", "--resolved")
+    assert r.returncode == 1
+
+
+# ---------------------------------------------------------------------------
+# Grammar
+# ---------------------------------------------------------------------------
+
+
+def test_check_singular_grammar(tmp_path: Path):
+    """'1 dead end' should use singular, not '1 dead ends'."""
+    _run(tmp_path, "init", "--repo", "r/repo", "--no-hooks")
+    _run(tmp_path, "log", "--approach", "only one")
+    r = _run(tmp_path, "check", "--session-start")
+    assert "1 dead end" in r.stdout
+    assert "1 dead ends" not in r.stdout
