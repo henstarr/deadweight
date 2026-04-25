@@ -2,7 +2,7 @@
   <img width="1774" height="887" alt="deadweight" src="https://github.com/user-attachments/assets/173807dc-515b-466d-88e1-0f93812f19af" />
 </p>
 
-**The map of where not to go.** Five developers on a team using AI coding agents. One of them hits a dead end — monkeypatching breaks test isolation, some internal API doesn't behave as documented, the ORM's eager-loading causes N+1s in a non-obvious place. They spend 14 turns discovering this. The next developer's agent spends 14 more turns discovering the exact same thing. deadweight stops that.
+**The map of where not to go.** 
 
 It's a repo-local registry of dead ends — approaches that didn't work — committed to git alongside your code. Every clone inherits the map. Every agent (Claude Code, Cursor, Copilot, aider, whatever) that can shell out benefits from it.
 
