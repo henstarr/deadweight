@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dw check --session-start"
+            "command": "dw check --session-start && dw list --limit 5"
           }
         ]
       }

@@ -20,3 +20,6 @@ dw log --approach "{what you tried}" --reason "{why it failed}" --turns-wasted {
 ```
 
 Optional flags: `--path`, `--task-id`, `--agent`, `--version`.
+
+
+For development, use UV for all python commands.

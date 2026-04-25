@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -154,13 +155,16 @@ def _install_claude_hooks(root: Path) -> bool:
                     return True
         return False
 
+    # Prefer the globally-installed `dw`; fall back to the currently running executable.
+    dw_cmd = shutil.which("dw") or sys.executable.replace("python", "dw") or "dw"
+
     changed = False
 
     session_start = hooks.setdefault("SessionStart", [])
     if not _already_present(session_start, "dw check"):
         session_start.append({
             "matcher": "",
-            "hooks": [{"type": "command", "command": "dw check --session-start"}],
+            "hooks": [{"type": "command", "command": f"{dw_cmd} check --session-start && {dw_cmd} list --limit 5"}],
         })
         changed = True
 
@@ -168,7 +172,7 @@ def _install_claude_hooks(root: Path) -> bool:
     if not _already_present(stop_hooks, "dw check"):
         stop_hooks.append({
             "matcher": "",
-            "hooks": [{"type": "command", "command": "dw check"}],
+            "hooks": [{"type": "command", "command": f"{dw_cmd} check"}],
         })
         changed = True
 

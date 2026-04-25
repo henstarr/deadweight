@@ -12,7 +12,7 @@ No server. No network. No auth. Just a jsonl file and a CLI.
 uv tool install git+https://github.com/henstarr/deadweight
 ```
 
-Installs `dw` on your PATH. Pin a ref with `@v0.1.0` or `@<sha>` if you want reproducibility.
+Installs `dw` on your PATH. Always pulls the latest from `main`.
 
 ## Quick start
 

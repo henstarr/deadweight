@@ -31,6 +31,9 @@ dw = "deadweight.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/henstarr/deadweight"
+Documentation = "https://github.com/henstarr/deadweight#readme"
+Repository = "https://github.com/henstarr/deadweight"
+Issues = "https://github.com/henstarr/deadweight/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/deadweight"]
